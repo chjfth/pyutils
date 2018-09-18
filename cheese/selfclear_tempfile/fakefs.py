@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
+import os
+
 from selfclear_tempfile.selfclear_tempfile import IFilesys
 
 class FakeFs(IFilesys):
@@ -15,7 +17,7 @@ class FakeFs(IFilesys):
 	
 
 	def listdir(self, dirpath):
-		return self._dir.keys()
+		return [os.path.basename(p) for p in self._dir.keys()]
 
 	def mkdir(self, dirpath):
 		pass
@@ -26,6 +28,7 @@ class FakeFs(IFilesys):
 		else:
 			assert uesec_ctime>=0
 			self._dir[filepath] = int(uesec_ctime)
+		return os.path.basename(filepath) # use filename string to simulate file-handle
 
 
 	def createopenfile(self, filepath, mode, **kwargs):

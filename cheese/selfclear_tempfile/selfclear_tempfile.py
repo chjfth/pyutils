@@ -144,7 +144,7 @@ class SelfclearTempfile: # todo: add set current time for unittest
 		return ret
 	
 	def listfiles(self):
-		return self._filesys.listdir()
+		return self._filesys.listdir(self._dirpath)
 	
 #	def is_prefix_match(self, filepath):
 #		filename = os.path.basename(filepath)
@@ -186,7 +186,7 @@ class SelfclearTempfile: # todo: add set current time for unittest
 		except:
 			raise
 		
-		is_clean_old = False
+		is_clean_old = False # modify later
 		
 		# Determine whether scan_delay_seconds has been elapsed since last call,
 		# if so, update temp.cleancheck's timestamp.
@@ -196,11 +196,15 @@ class SelfclearTempfile: # todo: add set current time for unittest
 			
 			if uesec_nowf-uesec_lastchk >= self._scan_delay_seconds:
 				is_clean_old = True
-				fs.update_mtime(self.cleancheck_filepath)
+				fs.update_mtime(self.cleancheck_filepath, uesec_nowf)
 				
 		except OSError: # must be file-not-exist
-			is_clean_old = True #uesec_lastchk = 0
-			fs.createopenfile(self.cleancheck_filepath, "w").close()
+			is_clean_old = True
+			if is_realfs:
+				is_clean_old = True #uesec_lastchk = 0
+				fs.createopenfile(self.cleancheck_filepath, "w").close()
+			else:
+				fs.t_createfile(self.cleancheck_filepath, uesec_nowf)
 		
 		if is_clean_old:
 			self._clean_old_tempfiles(uesec_nowf)
@@ -214,24 +218,24 @@ class SelfclearTempfile: # todo: add set current time for unittest
 		
 		fs = self._filesys
 		
-		def isclear(filepath):
-			if not os.path.basename(filepath).startswith(self._prefix):
+		def isclear(filename):
+			if not filename.startswith(self._prefix):
 				return False
 			
-			ctime = fs.get_ctime(filepath)
+			ctime = fs.get_ctime(os.path.join(self._dirpath, filename))
 			if uesec_now-ctime < self._preserve_seconds:
 				return False
 			
 			return True
 		
-		files = fs.listdir(self._dirpath)
+		filenames = fs.listdir(self._dirpath)
 		self._scandir_count += 1
 		
-		clear_filepaths = [f for f in files if isclear(f)]
+		clear_filenames = [f for f in filenames if isclear(f)]
 		
-		for filepath in clear_filepaths:
+		for filename in clear_filenames:
 			try:
-				fs.removefile(filepath)
+				fs.removefile(os.path.join(self._dirpath, filename))
 			except OSError:
 				pass
 	
@@ -269,8 +273,8 @@ class SelfclearTempfile: # todo: add set current time for unittest
 					fh = fs.createopenfile(newfilepath, openmode, **open_kwargs)
 					return fh
 				else:
-					fs.t_createfile(newfilepath, uesec_nowf)
-					return None
+					fh = fs.t_createfile(newfilepath, uesec_nowf)
+					return fh
 			except OSError:
 				retry += 1
 				tpart = ".t%d"%(retry)
