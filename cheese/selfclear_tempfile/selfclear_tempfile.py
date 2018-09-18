@@ -133,11 +133,18 @@ class SelfclearTempfile: # todo: add set current time for unittest
 		self._preserve_seconds = preserve_seconds
 		self._scan_delay_seconds = scan_delay_seconds
 		self._filesys = filesys
+		
+		# vars for debugging/testing
+		self._scandir_count = 0
+#		self._uesec_emu = None # only for unittest, emulate current time
 
 	@property
 	def cleancheck_filepath(self):
 		ret = os.path.join(self._dirpath, self._prefix+".cleancheck")
 		return ret
+	
+	def listfiles(self):
+		return self._filesys.listdir()
 	
 #	def is_prefix_match(self, filepath):
 #		filename = os.path.basename(filepath)
@@ -146,8 +153,10 @@ class SelfclearTempfile: # todo: add set current time for unittest
 #		else:
 #			return False
 	
-	def create_and_open(self, uesec_nowf, openmode="t", **open_kwargs):
+	def create_new(self, uesec_nowf=None, openmode="t", **open_kwargs):
 		"""Create a tempfile and open that file, returning its file handle.
+		
+		uesec_nowf: None means use current time(=real environment, not unittesting)
 		
 		openmode is passed to builtin open(). I will apply 'x' flag to ensure creating
 		a new file. User should not include 'r,w,a' in openmode, otherwise raise ValueError.
@@ -163,8 +172,10 @@ class SelfclearTempfile: # todo: add set current time for unittest
 		fs = self._filesys
 		
 		if uesec_nowf==None:
+			is_realfs = True
 			uesec_nowf = time.time()
-#		uesec_nowi = int(uesec_now)
+		else:
+			is_realfs = False
 		
 		# Create _dirpath if not exist.
 		#
@@ -192,14 +203,14 @@ class SelfclearTempfile: # todo: add set current time for unittest
 			fs.createopenfile(self.cleancheck_filepath, "w").close()
 		
 		if is_clean_old:
-			self.clean_old_tempfiles(uesec_nowf)
+			self._clean_old_tempfiles(uesec_nowf)
 		
-		filehandle = self._create_new_tempfile(uesec_nowf, openmode, **open_kwargs)
+		filehandle = self._create_new_tempfile(is_realfs, uesec_nowf, openmode, **open_kwargs)
 		
 		return filehandle
 	
 	
-	def clean_old_tempfiles(self, uesec_now):
+	def _clean_old_tempfiles(self, uesec_now):
 		
 		fs = self._filesys
 		
@@ -213,7 +224,10 @@ class SelfclearTempfile: # todo: add set current time for unittest
 			
 			return True
 		
-		clear_filepaths = [f for f in fs.listdir(self._dirpath) if isclear(f)]
+		files = fs.listdir(self._dirpath)
+		self._scandir_count += 1
+		
+		clear_filepaths = [f for f in files if isclear(f)]
 		
 		for filepath in clear_filepaths:
 			try:
@@ -221,7 +235,7 @@ class SelfclearTempfile: # todo: add set current time for unittest
 			except OSError:
 				pass
 	
-	def _create_new_tempfile(self, uesec_nowf, openmode, **open_kwargs):
+	def _create_new_tempfile(self, is_realfs, uesec_nowf, openmode, **open_kwargs):
 		""" Create new tempfile according to current uesec. 
 		The created filename will represent localtime YYMMDD_hhmmss.mmm .
 		For example, prefix is "everpic-", suffix is ".png", the result will be sth like:
@@ -251,8 +265,12 @@ class SelfclearTempfile: # todo: add set current time for unittest
 			newfilepath = os.path.join(self._dirpath, filename)
 			
 			try:
-				fh = fs.createopenfile(newfilepath, openmode, **open_kwargs)
-				return fh
+				if is_realfs:
+					fh = fs.createopenfile(newfilepath, openmode, **open_kwargs)
+					return fh
+				else:
+					fs.t_createfile(newfilepath, uesec_nowf)
+					return None
 			except OSError:
 				retry += 1
 				tpart = ".t%d"%(retry)
@@ -266,7 +284,8 @@ def create(targetdir, openmode="t", prefix='temp', suffix='.tmp',
 			**open_kwargs):
 	sctf = SelfclearTempfile(targetdir, prefix, suffix, preserve_seconds, scan_delay_seconds)
 	
-	sctf.create_and_open(None, openmode, **open_kwargs)
+	ret = sctf.create_new(None, openmode, **open_kwargs)
+	return ret
 
 
 def myprint():

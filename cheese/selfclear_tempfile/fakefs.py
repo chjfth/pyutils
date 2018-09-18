@@ -25,7 +25,7 @@ class FakeFs(IFilesys):
 			raise FileExistsError(filepath)
 		else:
 			assert uesec_ctime>=0
-			self._dir[filepath].uesec_ctime
+			self._dir[filepath] = int(uesec_ctime)
 
 
 	def createopenfile(self, filepath, mode, **kwargs):
