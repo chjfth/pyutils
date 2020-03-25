@@ -28,10 +28,10 @@ class IFilesys(ABC):
 		
 		uesec is the seconds count since Unix Epoch.
 		
-		This functions is only for unittest.
+		This functions is only for unittest. So it starts with t_ .
 		
 		Return the filepath created.
-		If error occurs, throw exeception:
+		If error occurs, throw exception:
 		* Specified filename already existed.
 		* Meet a read-only dirpath.
 		"""
@@ -79,7 +79,7 @@ class IFilesys(ABC):
 
 
 class RealFs(IFilesys):
-	"""A real filesytem which support underlying operations.
+	"""A real filesystem which supports underlying operations.
 	"""
 	def __init__(self):
 		pass
