@@ -6,17 +6,24 @@
 import os
 import re
 import datetime
-from enum import Enum # since Python 3.4
+from enum import Enum,IntEnum # since Python 3.4
+from collections import namedtuple
 
 from .share import *
 
+class MsgLevel(IntEnum):
+	err = 1
+	warn = 2
+	info = 3
+	dbg = 4
+
 class irsync_st:
-	
-	class msglevel(Enum):
-		dbg = "[DBG]"
-		info = "[INFO]"
-		warn = "[WARN]"
-		err = "[ERROR]"
+
+	pfxMsgLevel = [""]*5
+	pfxMsgLevel[MsgLevel.err.value] = "[ERROR]"
+	pfxMsgLevel[MsgLevel.warn.value] = "[WARN]"
+	pfxMsgLevel[MsgLevel.info.value] = "[INFO]"
+	pfxMsgLevel[MsgLevel.dbg.value] = "[DBG]"
 	
 	datetime_pattern_default = "YYYYMMDD.hhmmss"
 	
@@ -69,20 +76,15 @@ class irsync_st:
 		#
 		self.logfile , self.logfh = self.create_logfile()
 		
-		self._print_yield = False
+		self._loglevel = MsgLevel.info
 
 	@property
-	def is_print_yield(self):
-		return self._print_yield
+	def loglevel(self):
+		return self._loglevel
 	
-	@is_print_yield.setter
-	def is_print_yield(self, value):
-		if type(value) != type(True):
-			raise Err_irsync("Only True or False is allowed for .print_yield property!")
-		self._print_yield = value
-
-	def yield_message(self, msg): # Experimental. Not success yet!
-		yield msg
+	@loglevel.setter
+	def loglevel(self, level):
+		self._loglevel = level
 
 	def create_logfile(self):
 		filename_pattern = "%s.run*.log"%(self.datetime_sess)
@@ -91,28 +93,41 @@ class irsync_st:
 		return fp, fh
 
 	def prn(self, msglevel, msg):
+
+		if self.loglevel.value < msglevel.value:
+			return
+
+		lvn = msglevel.value
+		lvs = __class__.pfxMsgLevel[lvn]
+		
 		now = datetime.datetime.now()
 		timestr = "[%04d%02d%02d.%02d%02d%02d.%03d]"%(now.year, now.month, now.day, 
 			now.hour, now.minute, now.second, now.microsecond/1000)
-		msgline = "%s%s %s\n"%(timestr, msglevel.value, msg)
+		msgline = "%s%s %s\n"%(timestr, lvs , msg)
 		
 		self.logfh.write(msgline)
-		print(msgline)
-
-	def dbg(self, msg):
-		self.prn(__class__.msglevel.dbg, msg)
-
-	def info(self, msg):
-		self.prn(__class__.msglevel.info, msg)
-
-	def warn(self, msg):
-		self.prn(__class__.msglevel.warn, msg)
+		print(msgline, end="")
 
 	def err(self, msg):
-		self.prn(__class__.msglevel.err, msg)
+		self.prn(MsgLevel.err, msg)
+
+	def warn(self, msg):
+		self.prn(MsgLevel.warn, msg)
+
+	def info(self, msg):
+		self.prn(MsgLevel.info, msg)
+
+	def dbg(self, msg):
+		self.prn(MsgLevel.dbg, msg)
+
+	def prn_start_info(self):
+		pass
 
 	def run(self):
 		self.info("irsync - run() start")
+		
+		self.warn("irsync - test warn")
+		self.dbg("irsync - test dbg")
 		
 		self.info("irsync - run() end")
 		
@@ -133,7 +148,6 @@ def irsync_fetch_once(rsync_url, local_store_dir, local_shelf="", datetime_patte
 	
 	irs = irsync_st(rsync_url, local_store_dir, local_shelf, datetime_pattern)
 
-	irs.is_print_yield = True
 	irs.run()
 	
 	return True
