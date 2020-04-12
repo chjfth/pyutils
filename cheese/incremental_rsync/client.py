@@ -33,7 +33,7 @@ class irsync_st:
 			if type(argval) != selfattr_desiredtype: # check argument type validity
 				raise Err_irsync("You passed a wrong type to irsync initializing parameter '%s'. Desired type is '%s'."%(
 					argname, 
-					selfattr_desiredtype.__name__ # todo: any way to report Full-qualified type name?
+					"%s.%s"%(selfattr_desiredtype.__module__, selfattr_desiredtype.__name__) # sample: cheese.incremental_rsync.client.MsgLevel
 					)) 
 			setattr(self, selfattr_name, argval)
 	
@@ -158,13 +158,13 @@ def _check_rsync_url(url):
 	# return (server-name, server-path)
 	return m.group(1), m.group(2)
 
+
+
 def irsync_fetch_once(rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 	
 	_check_rsync_url(rsync_url)
 	
 	irs = irsync_st(rsync_url, local_store_dir, local_shelf, datetime_pattern, **args)
-
-#	irs.loglevel = MsgLevel.warn
 
 	irs.run()
 	

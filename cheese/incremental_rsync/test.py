@@ -15,7 +15,7 @@ if __name__=='__main__':
 #	print("server=%s , path=%s"%(server, path))
 
 	ret = irsync_fetch_once("rsync://server/mod", "d:/test", "shelf1",
-#		loglevel=MsgLevel.warn,
+#		loglevel=11, #MsgLevel.warn,
 		_=None)
 	print(ret)
 	
