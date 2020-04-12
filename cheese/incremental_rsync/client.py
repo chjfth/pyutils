@@ -27,13 +27,30 @@ class irsync_st:
 	
 	datetime_pattern_default = "YYYYMMDD.hhmmss"
 	
-	def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern=""):
+	def _save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name):
+		if argname in args:
+			argval = args[argname]
+			if type(argval) != selfattr_desiredtype: # check argument type validity
+				raise Err_irsync("You passed a wrong type to irsync initializing parameter '%s'. Desired type is '%s'."%(
+					argname, 
+					selfattr_desiredtype.__name__ # todo: any way to report Full-qualified type name?
+					)) 
+			setattr(self, selfattr_name, argval)
+	
+	def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 		self.rsync_url = rsync_url
 		self.local_store_dir = local_store_dir
 		self.datetime_pattern = datetime_pattern if datetime_pattern else __class__.datetime_pattern_default
 	
 		if not local_shelf:
 			pass # later: will set to final word of rsync url
+
+		self._loglevel = MsgLevel.info
+		
+		#
+		# Process extra optional arguments
+		#
+		self._save_extra_args(args, 'loglevel', MsgLevel, '_loglevel')
 	
 		#
 		# prepare some static working data
@@ -76,7 +93,6 @@ class irsync_st:
 		#
 		self.logfile , self.logfh = self.create_logfile()
 		
-		self._loglevel = MsgLevel.info
 
 	@property
 	def loglevel(self):
@@ -142,11 +158,13 @@ def _check_rsync_url(url):
 	# return (server-name, server-path)
 	return m.group(1), m.group(2)
 
-def irsync_fetch_once(rsync_url, local_store_dir, local_shelf="", datetime_pattern=""):
+def irsync_fetch_once(rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 	
 	_check_rsync_url(rsync_url)
 	
-	irs = irsync_st(rsync_url, local_store_dir, local_shelf, datetime_pattern)
+	irs = irsync_st(rsync_url, local_store_dir, local_shelf, datetime_pattern, **args)
+
+#	irs.loglevel = MsgLevel.warn
 
 	irs.run()
 	
