@@ -1,7 +1,7 @@
 
 # print("[%s] __name__=%s"%(__file__,__name__))
 
-import os
+import os, subprocess
 import re
 import datetime
 import glob
@@ -12,6 +12,12 @@ class Err_irsync(Exception):
 		self.errmsg = errmsg
 	def __str__(self):
 		return self.errmsg
+
+class Err_rsync_exec(Err_irsync):
+	def __init__(self, exitcode, ushelf):
+		errmsg = "rsync execution error, exitcode=%d. (ushelf=%s)"%(exitcode, ushelf)
+		super().__init__(errmsg)
+	
 
 class err_FileExists(Exception): # internal use
 	def __init__(self, errfilepath):
@@ -41,10 +47,15 @@ def _create_logfile_with_seq_once(filepath_pattern):
 	
 	dirpath, filename_pattern = os.path.split(filepath_pattern)
 	
-	if filename_pattern.count('*') != 1:
-		raise Err_irsync("BUG: filepath_pattern does not contain an single '*': %s"%(filepath_pattern))
+	if not (filename_pattern.count('*')==1 and dirpath.count('*')==0):
+		raise Err_irsync("BUG: filepath_pattern MUST contain one and only one '*'. Your filepath_pattern is '%s'."%(filepath_pattern))
 	
-	existings = glob.glob(filepath_pattern)
+	glob1, glob2 = filepath_pattern.split('*')
+	globbing_pattern = glob.escape(glob1) + '*' + glob.escape(glob2)
+	
+	existings = glob.glob(globbing_pattern)
+	
+	print(">>> (%s) %s"%(globbing_pattern,existings))
 	if not existings:
 		create_filename = filename_pattern.replace('*', '0')
 	else:
@@ -88,11 +99,12 @@ Tip to remove starting "log" and ending "log" only once:
 	
 	return create_filepath, fh
 
+
 _FileExists_max_retry = 10
 #
 def create_logfile_with_seq(filepath_pattern):
 	"""
-	filepath_pattern should have a single '*' in it.
+	filepath_pattern should have a single '*' in it, e.g. "20200412.run*.log"
 	Return: tuple ( created_filepath , file_handle )
 	
 	Example: 
@@ -114,6 +126,40 @@ def create_logfile_with_seq(filepath_pattern):
 	text += "Log file pattern: %s \n"%(filepath_pattern)
 	text += "Tried %d times with actual file paths: \n"%(_FileExists_max_retry)
 	for i in range(_FileExists_max_retry):
-		text += "  %s\n"%(filepath[i])
+		text += "  %s\n"%(filepaths[i])
 	
 	raise Err_irsync(text)
+
+
+class Generator: # a clever helper class: https://stackoverflow.com/a/34073559/151453
+    def __init__(self, gen):
+        self.gen = gen
+
+    def __iter__(self):
+        self.value = yield from self.gen
+
+def y_run_exe_log_output(cmd_args, dict_Popen_args):
+	subproc = subprocess.Popen(cmd_args, 
+			stdout=subprocess.PIPE, stderr=subprocess.STDOUT, # these two are important
+	 		**dict_Popen_args)
+	
+	while True:
+		line = subproc.stdout.readline()
+		if not line: # assume child-process has ended.
+			break
+		yield line
+
+	subproc.wait() # we know that child-process should have exited.
+	return subproc.returncode # return child-process exit-code
+
+def run_exe_log_output_and_print(cmd_args, dict_Popen_args, logfile_handle):
+	
+	gen_childoutput = Generator(y_run_exe_log_output(cmd_args, dict_Popen_args))
+	for line in gen_childoutput:
+		textline = line.decode("utf8")
+		logfile_handle.write(textline)
+		print(textline, end='')
+
+	return gen_childoutput.value # return child-process exit-code
+
+

@@ -38,8 +38,22 @@ class irsync_st:
 			setattr(self, selfattr_name, argval)
 	
 	def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
+
+		# [local_store_dir]/[server.local_shelf] becomes final target dir for rsync.
+		
+		#
+		# Some parameter validity checking.
+		#
+
+		if datetime_pattern.find(' ')>=0:
+			raise Err_irsync("Error: You assign datetime_pattern='%s', which contains space."%(datetime_pattern))
+
+		#
+		# Set default working parameters.
+		#
+		
 		self.rsync_url = rsync_url
-		self.local_store_dir = local_store_dir
+		self.local_store_dir = os.path.abspath(local_store_dir)
 		self.datetime_pattern = datetime_pattern if datetime_pattern else __class__.datetime_pattern_default
 	
 		if not local_shelf:
@@ -126,6 +140,7 @@ class irsync_st:
 
 	def err(self, msg):
 		self.prn(MsgLevel.err, msg)
+		raise Err_irsync(msg) # On err, we raise Exception to conclude our work.
 
 	def warn(self, msg):
 		self.prn(MsgLevel.warn, msg)
@@ -140,12 +155,54 @@ class irsync_st:
 		pass
 
 	def run(self):
+		# Return normally on success, raise Exception on error.
+		
 		self.info("irsync - run() start")
 		
-		self.warn("irsync - test warn")
-		self.dbg("irsync - test dbg")
+		# Check whether finish-dirpath has existed, if so, we're done.
+		
+		if os.path.exists(self.finish_dirpath):
+			if os.path.isdir(self.finish_dirpath):
+				self.info("Backup already done in directory: %s"%(self.finish_dirpath))
+				return
+			else:
+				self.err("I need to create backup directory '%s', but it appears to be a file in the way."%(
+					self.finish_dirpath))
+		
+		os.makedirs(self.working_dirpath, exist_ok=True)
+		
+		#
+		# Run rsync exe and capture its output to log file.
+		#
+		rsync_cmd = "rsync -v -a %s %s"%(self.rsync_url, self.working_dirpath)
+		#
+		rsync_logfile_pattern = "%s.rsync*.log"%(self.datetime_sess)
+		fp, fh = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
+		#
+		self.info(""":
+  Now running:   %s
+  With log file: %s (in same directory)
+"""%(rsync_cmd, os.path.basename(fp)))
+		#
+		exitcode = run_exe_log_output_and_print(rsync_cmd, {"shell":True}, fh)
+		
+		if exitcode==0:
+			self.info("Rsync run success.")
+		else:
+			self.warn("Rsync run fail, exitcode=%d"%(exitcode))
+			raise Err_rsync_exec(exitcode, self.ushelf_name)
 		
 		self.info("irsync - run() end")
+
+		# Move .working-directory into finish-directory
+		#
+		fh.close()
+		self.logfh.close()
+		os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
+		os.rename(self.working_dirpath, self.finish_dirpath)
+		
+#		self.info("A backup action has just finished at: %s"%(self.finish_dirpath))
+		
 		
 
 
