@@ -24,6 +24,12 @@ class err_FileExists(Exception): # internal use
 		self.errfilepath = errfilepath
 
 
+def datetime_now_str():
+	now = datetime.datetime.now()
+	timestr = "%04d%02d%02d.%02d%02d%02d.%03d"%(now.year, now.month, now.day, 
+		now.hour, now.minute, now.second, now.microsecond/1000)
+	return timestr
+
 def datetime_by_pattern(pattern):
 	# Example: pattern="YYYYMMDD.hhmmss"
 	# Return: "20200411.153300"
@@ -55,7 +61,7 @@ def _create_logfile_with_seq_once(filepath_pattern):
 	
 	existings = glob.glob(globbing_pattern)
 	
-	print(">>> (%s) %s"%(globbing_pattern,existings))
+#	print("### (%s) %s"%(globbing_pattern,existings))
 	if not existings:
 		create_filename = filename_pattern.replace('*', '0')
 	else:

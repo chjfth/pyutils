@@ -11,6 +11,8 @@ from collections import namedtuple
 
 from .share import *
 
+LOG_NOD = 'logs' # as directory node name for storing log files.
+
 class MsgLevel(IntEnum):
 	err = 1
 	warn = 2
@@ -96,12 +98,12 @@ class irsync_st:
 		# Memo: I place .working folder directly at local_store_dir(instead of in datetime_sess subfolder)
 		# bcz of eye-catching purpose.
 		#
-		self.working_dirname = "[{1}].{0}.working".format(self.datetime_sess, self.ushelf_name)
+		self.working_dirname = "{0}@[{1}].working".format(self.datetime_sess, self.ushelf_name)
 		self.working_dirpath = os.path.join(self.local_store_dir, self.working_dirname)
 		
 		# Previous-backup info enable us to do incremental backup.
 		#
-		self.prev_backup_inifile = os.path.join(self.local_store_dir, "[{}].prev".format(self.ushelf_name))
+		self.prev_ushelf_inifile = os.path.join(self.local_store_dir, "[{}].prev".format(self.ushelf_name))
 		
 		# logging filename and its handle. If error, raise exception.
 		#
@@ -118,7 +120,7 @@ class irsync_st:
 
 	def create_logfile(self):
 		filename_pattern = "%s.run*.log"%(self.datetime_sess)
-		filepath_pattern = os.path.join(self.working_dirpath, filename_pattern)
+		filepath_pattern = os.path.join(self.working_dirpath, LOG_NOD, filename_pattern)
 		fp, fh = create_logfile_with_seq(filepath_pattern) # in share.py
 		return fp, fh
 
@@ -130,10 +132,7 @@ class irsync_st:
 		lvn = msglevel.value
 		lvs = __class__.pfxMsgLevel[lvn]
 		
-		now = datetime.datetime.now()
-		timestr = "[%04d%02d%02d.%02d%02d%02d.%03d]"%(now.year, now.month, now.day, 
-			now.hour, now.minute, now.second, now.microsecond/1000)
-		msgline = "%s%s %s\n"%(timestr, lvs , msg)
+		msgline = "[%s]%s %s\n"%(datetime_now_str(), lvs , msg)
 		
 		self.logfh.write(msgline)
 		print(msgline, end="")
@@ -155,11 +154,13 @@ class irsync_st:
 		pass
 
 	def run(self):
-		# Return normally on success, raise Exception on error.
+		"""
+		Return normally on success, raise Exception on error.
+		"""
 		
 		self.info("irsync - run() start")
 		
-		# Check whether finish-dirpath has existed, if so, we're done.
+		# Check whether finish-dirpath has existed, if so, the backup has done already.
 		
 		if os.path.exists(self.finish_dirpath):
 			if os.path.isdir(self.finish_dirpath):
@@ -171,20 +172,32 @@ class irsync_st:
 		
 		os.makedirs(self.working_dirpath, exist_ok=True)
 		
+		line_sep78 = '='*78
+		
 		#
 		# Run rsync exe and capture its output to log file.
 		#
 		rsync_cmd = "rsync -v -a %s %s"%(self.rsync_url, self.working_dirpath)
 		#
-		rsync_logfile_pattern = "%s.rsync*.log"%(self.datetime_sess)
-		fp, fh = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
+		# If irsync primary logfile(self.logfile) is 20200414.run0.log, 
+		# We will create rsync logfile with pattern 20200414.run0.rsync*.log ,
+		# so that we know the "...rsync0.log", "...rsync1.log" belongs to run0.
+		rsync_logfile_pattern = '.rsync*'.join(os.path.splitext(self.logfile))
+		fp_rsync, fh_rsync = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
 		#
 		self.info(""":
   Now running:   %s
-  With log file: %s (in same directory)
-"""%(rsync_cmd, os.path.basename(fp)))
+  With log file: %s (in same directory as this one)
+%s
+"""%(rsync_cmd, os.path.basename(fp_rsync), line_sep78))
 		#
-		exitcode = run_exe_log_output_and_print(rsync_cmd, {"shell":True}, fh)
+		# Add some banner text at start of fp_rsync.
+		fh_rsync.write("""[%s] This is the console output log of shell command:
+    %s
+%s
+"""%(datetime_now_str(), rsync_cmd, line_sep78))
+		#
+		exitcode = run_exe_log_output_and_print(rsync_cmd, {"shell":True}, fh_rsync)
 		
 		if exitcode==0:
 			self.info("Rsync run success.")
@@ -196,7 +209,7 @@ class irsync_st:
 
 		# Move .working-directory into finish-directory
 		#
-		fh.close()
+		fh_rsync.close()
 		self.logfh.close()
 		os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
 		os.rename(self.working_dirpath, self.finish_dirpath)
