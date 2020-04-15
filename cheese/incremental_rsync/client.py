@@ -81,24 +81,24 @@ class irsync_st:
 		
 		self.ushelf_name = "%s.%s"%(server, local_shelf)
 		
-		# datetime_sess: this backup session's datetime string
-		# Sample: 
+		# datetime_vault: this backup session's datetime-identified vault
+		# Examples: 
 		#		20200411.213300
 		#		2020-04-11
 		#
-		self.datetime_sess = datetime_by_pattern(self.datetime_pattern)
+		self.datetime_vault = datetime_by_pattern(self.datetime_pattern)
 		
-		self.finish_dirpath = os.path.join(self.local_store_dir, self.datetime_sess, self.ushelf_name)
+		self.finish_dirpath = os.path.join(self.local_store_dir, self.datetime_vault, self.ushelf_name)
 			# Final backup content will be placed in this dirpath. 
 			# The dirpath consists of three parts:
-			# local_store_dir / datetime_sess / ushelf_name
+			# local_store_dir / datetime_vault / ushelf_name
 
 		# Backup content transferring is first conveyed into a .working folder, and upon transfer finish,
 		# it will then be moved into its finish_dirpath, for the purpose of being atomic.
-		# Memo: I place .working folder directly at local_store_dir(instead of in datetime_sess subfolder)
+		# Memo: I place .working folder directly at local_store_dir(instead of in datetime_vault subfolder)
 		# bcz of eye-catching purpose.
 		#
-		self.working_dirname = "{0}@[{1}].working".format(self.datetime_sess, self.ushelf_name)
+		self.working_dirname = "{0}@[{1}].working".format(self.datetime_vault, self.ushelf_name)
 		self.working_dirpath = os.path.join(self.local_store_dir, self.working_dirname)
 		
 		# Previous-backup info enable us to do incremental backup.
@@ -119,7 +119,7 @@ class irsync_st:
 		self._loglevel = level
 
 	def create_logfile(self):
-		filename_pattern = "%s.run*.log"%(self.datetime_sess)
+		filename_pattern = "%s.run*.log"%(self.datetime_vault)
 		filepath_pattern = os.path.join(self.working_dirpath, LOG_NOD, filename_pattern)
 		fp, fh = create_logfile_with_seq(filepath_pattern) # in share.py
 		return fp, fh
