@@ -59,7 +59,7 @@ class irsync_st:
 		self.datetime_pattern = datetime_pattern if datetime_pattern else __class__.datetime_pattern_default
 	
 		if not local_shelf:
-			pass # later: will set to final word of rsync url
+			pass # later: will set to final word(token) of rsync url
 
 		self._loglevel = MsgLevel.info
 		
@@ -76,10 +76,12 @@ class irsync_st:
 		# 'u' implies unique, I name it so bcz I expect/hope it is unique within 
 		# a specific local_store_dir .
 		server, spath = _check_rsync_url(rsync_url)
+		server_goodchars = server.replace(':', '~') # ":" is not valid Windows filename, so change it to ~
+
 		if not local_shelf:
 			local_shelf = spath.split("/")[-1] # final word of spath
 		
-		self.ushelf_name = "%s.%s"%(server, local_shelf)
+		self.ushelf_name = "%s.%s"%(server_goodchars, local_shelf)
 		
 		# datetime_vault: this backup session's datetime-identified vault
 		# Examples: 
