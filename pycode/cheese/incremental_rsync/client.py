@@ -41,7 +41,7 @@ class irsync_st:
 	
 	def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 
-		# [local_store_dir]/[server.local_shelf] becomes final target dir for rsync.
+		# [local_store_dir]/[datetime_vault]/[server.local_shelf] becomes final target dir for rsync.
 		
 		#
 		# Some parameter validity checking.
@@ -98,7 +98,7 @@ class irsync_st:
 		# Backup content transferring is first conveyed into a .working folder, and upon transfer finish,
 		# it will then be moved into its finish_dirpath, for the purpose of being atomic.
 		# Memo: I place .working folder directly at local_store_dir(instead of in datetime_vault subfolder)
-		# bcz of eye-catching purpose.
+		# for easy eye-catching.
 		#
 		self.working_dirname = "{0}@[{1}].working".format(self.datetime_vault, self.ushelf_name)
 		self.working_dirpath = os.path.join(self.local_store_dir, self.working_dirname)
@@ -215,7 +215,8 @@ class irsync_st:
 		self.logfh.close()
 		os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
 		os.rename(self.working_dirpath, self.finish_dirpath)
-		
+
+#		self.logfh has been closed, so we cannot do this:
 #		self.info("A backup action has just finished at: %s"%(self.finish_dirpath))
 		
 		
