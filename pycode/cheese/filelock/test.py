@@ -4,5 +4,7 @@
 from .assistive_filelock import *
 
 if __name__=='__main__':
+    filelock = AsFilelock ("t1.lck")
+    filelock.lock()
+    filelock.unlock()
 
-    asfilelock_create()
