@@ -38,6 +38,10 @@ class AsFilelock:
 		self.lockpath = filepath_as_lock
 		self.fhlock = None
 
+	@property
+	def abslockpath(self):
+		return os.path.abspath(self.lockpath)
+
 	def lock(self):
 		if is_windows:
 			assert(0) # lock_windows(self)
@@ -56,7 +60,7 @@ class AsFilelock:
 			self.fhlock = open(self.lockpath, "r+" if file_exist else "w+")
 		except OSError:
 			raise Err_asfilelock(
-				'Cannot %s "%s" as lockfile.'%("open" if file_exist else "create", self.lockpath)
+				'Cannot %s "%s" as lockfile.'%("open" if file_exist else "create", self.abslockpath)
 			)
 
 		try:
@@ -65,14 +69,14 @@ class AsFilelock:
 			# If lock success, record our pid into file content.
 			self.fhlock.seek(0, 0)
 			self.fhlock.truncate()
-			self.fhlock.write("pid=%d"%(os.getpid)) # to fix
+			self.fhlock.write("pid=%d"%(os.getpid())) # to fix
 			self.fhlock.flush()
 
 		except BlockingIOError:
-			his_pid = AsLockfile.getpid_from_lckfile(self.fhlock)
+			his_pid = AsFilelock.getpid_from_lckfile(self.fhlock)
 			raise Err_asfilelock(
 				'Cannot apply lock on file "%s"; it is probably locked by another process with pid=%d'%(
-					self.lockpath, his_pid
+					self.abslockpath, his_pid
 				)
 			)
 		pass
@@ -80,6 +84,13 @@ class AsFilelock:
 	def unlock_unix(self):
 		if not self.fhlock:
 			return
+
+		# clear file content
+		self.fhlock.seek(0, 0)
+		self.fhlock.truncate()
+
 		fcntl.flock(self.fhlock, fcntl.LOCK_UN)
+		self.fhlock.close()
+		self.fhlock = None
 
 
