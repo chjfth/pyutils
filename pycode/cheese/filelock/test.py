@@ -5,6 +5,14 @@ from .assistive_filelock import *
 
 if __name__=='__main__':
     filelock = AsFilelock ("t1.lck")
-    filelock.lock()
+
+    try:
+        filelock.lock()
+        print('Lock success.')
+    except Err_asfilelock as e:
+        print(e.errmsg)
+        exit(4)
+
+    print('Now unlock.')
     filelock.unlock()
 

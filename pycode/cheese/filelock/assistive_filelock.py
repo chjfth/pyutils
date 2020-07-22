@@ -44,17 +44,28 @@ class AsFilelock:
 
 	def lock(self):
 		if is_windows:
-			assert(0) # lock_windows(self)
+			self._lock_windows()
 		else:
-			self.lock_unix()
+			self._lock_unix()
 
 	def unlock(self):
 		if is_windows:
-			assert (0)  # lock_windows(self)
+			self._unlock_windows()
 		else:
-			self.unlock_unix()
+			self._unlock_unix()
 
-	def lock_unix(self):
+	def _record_pid_in_lockfile(self):
+		self.fhlock.seek(0, 0)
+		self.fhlock.truncate()
+		self.fhlock.write("pid=%d" % (os.getpid()))  # to fix
+		self.fhlock.flush()
+
+	def _clear_pid_in_lockfile(self):
+		# clear file content
+		self.fhlock.seek(0, 0)
+		self.fhlock.truncate()
+
+	def _lock_unix(self):
 		file_exist = os.path.isfile(self.lockpath)
 		try:
 			self.fhlock = open(self.lockpath, "r+" if file_exist else "w+")
@@ -66,11 +77,8 @@ class AsFilelock:
 		try:
 			fcntl.flock(self.fhlock, fcntl.LOCK_EX|fcntl.LOCK_NB)
 
-			# If lock success, record our pid into file content.
-			self.fhlock.seek(0, 0)
-			self.fhlock.truncate()
-			self.fhlock.write("pid=%d"%(os.getpid())) # to fix
-			self.fhlock.flush()
+			# Lock success, record our pid into file content.
+			self._record_pid_in_lockfile()
 
 		except BlockingIOError:
 			his_pid = AsFilelock.getpid_from_lckfile(self.fhlock)
@@ -79,18 +87,57 @@ class AsFilelock:
 					self.abslockpath, his_pid
 				)
 			)
-		pass
+		return
 
-	def unlock_unix(self):
+	def _unlock_unix(self):
 		if not self.fhlock:
 			return
 
-		# clear file content
-		self.fhlock.seek(0, 0)
-		self.fhlock.truncate()
+		self._clear_pid_in_lockfile()
 
 		fcntl.flock(self.fhlock, fcntl.LOCK_UN)
 		self.fhlock.close()
 		self.fhlock = None
 
+	def _lock_windows(self):
+		try:
+			os.remove(self.lockpath)
+		except OSError:
+			# Maybe PermissionError if the file is already opened by others,
+			#    or FileNotFoundError if file does not exist yet.
+			# Yes, just ignore this file deleting error.
+			# The ensuing open(,'x+') will report the actual error.
+			pass
 
+		if os.path.isdir(self.lockpath):
+			raise Err_asfilelock(
+				'Cannot apply filelock on "%s" because it is a directory.'%(self.lockpath)
+			)
+
+		if os.path.exists(self.lockpath):
+			raise Err_asfilelock(
+				'To apply filelock on "%s", I have to remove the file first. '%(self.lockpath) +
+				'But I failed to remove it. It may have been locked by others.'
+			)
+
+		try:
+			self.fhlock = open(self.lockpath, 'x+')
+
+			# Lock success, record our pid into file content.
+			self._record_pid_in_lockfile()
+
+		except OSError:
+			raise Err_asfilelock(
+				'Fail to place filelock on "%s" because it has been locked by others.'%(self.lockpath)
+			)
+		return
+
+	def _unlock_windows(self):
+		if not self.fhlock:
+			return
+
+		self._clear_pid_in_lockfile()
+
+		# Close file handle(so that others can open it), means unlock.
+		self.fhlock.close()
+		self.fhlock = None
