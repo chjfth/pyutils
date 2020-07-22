@@ -99,10 +99,13 @@
   <action id="Console.TableResult.EditValueMaximized">
     <keyboard-shortcut first-keystroke="shift enter" />
   </action>
+  <action id="Console.TableResult.Reload" />
   <action id="CopyElement" />
+  <action id="DatabaseView.Refresh" />
   <action id="Debug">
     <keyboard-shortcut first-keystroke="alt f5" />
   </action>
+  <action id="Django.RunManageTaskAction" />
   <action id="EditBreakpoint">
     <keyboard-shortcut first-keystroke="alt f9" />
   </action>
@@ -199,6 +202,8 @@
   <action id="Git.Reword.Commit">
     <keyboard-shortcut first-keystroke="ctrl r" second-keystroke="r" />
   </action>
+  <action id="Github.PullRequest.Details.Reload" />
+  <action id="Github.PullRequest.Timeline.Update" />
   <action id="GoToTab1">
     <keyboard-shortcut first-keystroke="ctrl 1" />
   </action>
@@ -358,7 +363,7 @@
     <keyboard-shortcut first-keystroke="ctrl comma" />
   </action>
   <action id="Refactorings.QuickListPopupAction">
-    <keyboard-shortcut first-keystroke="shift ctrl r" />
+    <keyboard-shortcut first-keystroke="ctrl alt r" />
   </action>
   <action id="ReformatCode">
     <keyboard-shortcut first-keystroke="ctrl alt enter" />
@@ -367,9 +372,7 @@
     <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="d" />
     <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl d" />
   </action>
-  <action id="Refresh">
-    <keyboard-shortcut first-keystroke="ctrl alt r" />
-  </action>
+  <action id="Refresh" />
   <action id="RenameElement">
     <keyboard-shortcut first-keystroke="ctrl r" second-keystroke="r" />
     <keyboard-shortcut first-keystroke="ctrl r" second-keystroke="ctrl r" />
@@ -493,6 +496,7 @@
   <action id="UnselectPreviousOccurrence">
     <keyboard-shortcut first-keystroke="shift alt comma" />
   </action>
+  <action id="Vcs.Log.Refresh" />
   <action id="Vcs.QuickListPopupAction">
     <keyboard-shortcut first-keystroke="ctrl alt q" />
   </action>
@@ -517,5 +521,6 @@
   <action id="XDebugger.MuteBreakpoints">
     <keyboard-shortcut first-keystroke="shift ctrl alt f10" />
   </action>
+  <action id="hg4idea.QRefresh" />
   <action id="tasks.goto" />
 </keymap>
