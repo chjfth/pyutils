@@ -3,11 +3,12 @@
 
 # print("[%s] __name__=%s"%(__file__,__name__))
 
-import os
-import re
+import os, sys, re
 import datetime
 from enum import Enum,IntEnum # since Python 3.4
 from collections import namedtuple
+
+from cheese.filelock.assistive_filelock import AsFilelock, Err_asfilelock
 
 from .share import *
 
@@ -38,7 +39,15 @@ class irsync_st:
 					"%s.%s"%(selfattr_desiredtype.__module__, selfattr_desiredtype.__name__) # sample: cheese.incremental_rsync.client.MsgLevel
 					)) 
 			setattr(self, selfattr_name, argval)
-	
+
+	@property
+	def master_logfile(self):
+		return os.path.join(self.local_store_dir, "irsync.log")
+
+	@property
+	def master_logfile_lck(self):
+		return self.master_logfile + ".lck"
+
 	def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 
 		# [local_store_dir]/[datetime_vault]/[server.local_shelf] becomes final target dir for rsync.
@@ -106,11 +115,48 @@ class irsync_st:
 		# Previous-backup info enable us to do incremental backup.
 		#
 		self.prev_ushelf_inifile = os.path.join(self.local_store_dir, "[{}].prev".format(self.ushelf_name))
-		
-		# logging filename and its handle. If error, raise exception.
+
+		self.master_logfile_start()
+		return
+
+	def master_logfile_start(self):
 		#
-		self.logfile , self.logfh = self.create_logfile()
-		
+		# Acquire master-logfile's filelock first, so to ensure we're the only process
+		# that is storing into this local_store_dir. If acquire-filelock fails, just quit.
+		#
+		self.master_filelock = AsFilelock(self.master_logfile_lck)
+
+		try:
+			self.master_filelock.lock()
+		except Err_asfilelock as e:
+			# We have no logfile to write here, so just print to stderr.
+			sys.stderr.write("""
+Error:  Cannot acquire lock on local_store_dir "%s", so I cannot continue.      
+Detail: %s
+"""%(self.local_store_dir, e.errmsg))
+			exit(4)
+
+		self.master_logfh = open(self.master_logfile, "a")
+		self.master_logfh.write("\n~\n") # We don't want timestamp on this linesep char
+
+		self.prn_masterlog("""Irsync session start.
+    rsync_url:                {}
+    local_store_dir(working): {}
+    local_store_dir(finish) : {}
+""".format  (
+            self.rsync_url,
+            self.working_dirpath,
+            self.finish_dirpath
+		    )
+		)
+		return
+
+	def master_logfile_end(self):
+		self.prn_masterlog('Irsync session success. Get your backup at "%s"'%(self.finish_dirpath))
+		## todo: Tell extra info like time used etc.
+
+		self.master_filelock.unlock()
+		self.master_logfh.close()
 
 	@property
 	def loglevel(self):
@@ -152,6 +198,14 @@ class irsync_st:
 	def dbg(self, msg):
 		self.prn(MsgLevel.dbg, msg)
 
+	def prn_masterlog(self, msg):
+		msgline = "[%s]%s\n" % (datetime_now_str(), msg)
+
+		self.master_logfh.write(msgline)
+		self.master_logfh.flush()
+
+		print(msgline, end="")
+
 	def prn_start_info(self):
 		pass
 
@@ -159,19 +213,39 @@ class irsync_st:
 		"""
 		Return normally on success, raise Exception on error.
 		"""
-		
-		self.info("irsync - run() start")
-		
+
 		# Check whether finish-dirpath has existed, if so, the backup has done already.
 		
 		if os.path.exists(self.finish_dirpath):
 			if os.path.isdir(self.finish_dirpath):
-				self.info("Backup already done in directory: %s"%(self.finish_dirpath))
+				self.prn_masterlog(
+					"The local_store_dir(finish) has existed already. So I think the backup had been done some time ago.")
 				return
 			else:
 				self.err("I need to create backup directory '%s', but it appears to be a file in the way."%(
 					self.finish_dirpath))
-		
+
+		# Create session logging filename and save its handle. If error, raise exception.
+		#
+		try:
+			self.sess_logfile, self.logfh = self.create_logfile()
+			sesslog_d, sesslog_n = os.path.split(self.sess_logfile)
+			assert( sesslog_d.startswith(self.working_dirpath) ) # sesslog_d has an extra 'logs' subdir
+			self.prn_masterlog("""Session logfile can be found at:
+    (working) : {}
+    (finish)  : {}
+""".format      (
+				self.sess_logfile,
+				self.sess_logfile.replace(self.working_dirpath, self.finish_dirpath)
+				)
+			)
+		except:
+			# todo:: in the future, may employ a more detailed error message stack.
+			self.prn_masterlog("Unexpected! Fail to create a session logfile.")
+			raise
+
+		self.info("irsync session - run() start")
+
 		os.makedirs(self.working_dirpath, exist_ok=True)
 		
 		line_sep78 = '='*78
@@ -181,10 +255,10 @@ class irsync_st:
 		#
 		rsync_cmd = "rsync -v -a %s %s"%(self.rsync_url, self.working_dirpath)
 		#
-		# If irsync primary logfile(self.logfile) is 20200414.run0.log, 
+		# If irsync session logfile(self.sess_logfile) is 20200414.run0.log,
 		# We will create rsync logfile with pattern 20200414.run0.rsync*.log ,
 		# so that we know the "...rsync0.log", "...rsync1.log" belongs to run0.
-		rsync_logfile_pattern = '.rsync*'.join(os.path.splitext(self.logfile))
+		rsync_logfile_pattern = '.rsync*'.join(os.path.splitext(self.sess_logfile))
 		fp_rsync, fh_rsync = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
 		#
 		self.info(""":
@@ -207,20 +281,21 @@ class irsync_st:
 			self.warn("Rsync run fail, exitcode=%d"%(exitcode))
 			raise Err_rsync_exec(exitcode, self.ushelf_name)
 		
-		self.info("irsync - run() end")
+		self.info("irsync session - run() end")
 
 		# Move .working-directory into finish-directory
 		#
 		fh_rsync.close()
 		self.logfh.close()
-		os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
-		os.rename(self.working_dirpath, self.finish_dirpath)
+		self.logfh = None
 
-#		self.logfh has been closed, so we cannot do this:
-#		self.info("A backup action has just finished at: %s"%(self.finish_dirpath))
-		
-		
+		try:
+			os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
+			os.rename(self.working_dirpath, self.finish_dirpath)
+		except OSError:
+			raise Err_irsync("Error: Irsync session succeeded, but fail to move working directory to finish directory.")
 
+		self.master_logfile_end()
 
 def _check_rsync_url(url):
 	# url should be rsync://<server>/<srcmodule>
