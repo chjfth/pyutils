@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# coding: utf-8
 
 # print("[%s] __name__=%s"%(__file__,__name__))
 
@@ -137,12 +139,15 @@ def create_logfile_with_seq(filepath_pattern):
 	raise Err_irsync(text)
 
 
-class Generator: # a clever helper class: https://stackoverflow.com/a/34073559/151453
+class Generator:
+	# a clever helper class: https://stackoverflow.com/a/34073559/151453
+	# to make generator object explicit to caller code, so that caller code
+	# can later fetch the generator's return value.
     def __init__(self, gen):
         self.gen = gen
 
     def __iter__(self):
-        self.value = yield from self.gen
+        self.retvalue = yield from self.gen
 
 def y_run_exe_log_output(cmd_args, dict_Popen_args):
 	subproc = subprocess.Popen(cmd_args, 
@@ -151,7 +156,7 @@ def y_run_exe_log_output(cmd_args, dict_Popen_args):
 	
 	while True:
 		line = subproc.stdout.readline()
-		if not line: # assume child-process has ended.
+		if not line: # this means child-process has ended.
 			break
 		yield line
 
@@ -166,6 +171,4 @@ def run_exe_log_output_and_print(cmd_args, dict_Popen_args, logfile_handle):
 		logfile_handle.write(textline)
 		print(textline, end='')
 
-	return gen_childoutput.value # return child-process exit-code
-
-
+	return gen_childoutput.retvalue # return child-process exit-code

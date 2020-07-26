@@ -11,6 +11,7 @@ from collections import namedtuple
 from cheese.filelock.assistive_filelock import AsFilelock, Err_asfilelock
 
 from .share import *
+from .helper import *
 
 LOG_NOD = 'logs' # as directory node name for storing log files.
 
@@ -51,7 +52,8 @@ class irsync_st:
 	def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 
 		# [local_store_dir]/[datetime_vault]/[server.local_shelf] becomes final target dir for rsync.
-		
+		# [server.local_shelf] is called [ushelf] for brevity.
+
 		#
 		# Some parameter validity checking.
 		#
@@ -253,7 +255,7 @@ Detail: %s
 		#
 		# Run rsync exe and capture its output to log file.
 		#
-		rsync_cmd = "rsync -v -a %s %s"%(self.rsync_url, self.working_dirpath)
+		rsync_cmd = "rsync --progress -v -a %s %s"%(self.rsync_url, self.working_dirpath)
 		#
 		# If irsync session logfile(self.sess_logfile) is 20200414.run0.log,
 		# We will create rsync logfile with pattern 20200414.run0.rsync*.log ,
@@ -262,7 +264,7 @@ Detail: %s
 		fp_rsync, fh_rsync = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
 		#
 		self.info(""":
-  Now running:   %s
+  Now running  : %s
   With log file: %s (in same directory as this one)
 %s
 """%(rsync_cmd, os.path.basename(fp_rsync), line_sep78))
