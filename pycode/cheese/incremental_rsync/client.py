@@ -15,6 +15,9 @@ from .helper import *
 
 LOG_NOD = 'logs' # as directory node name for storing log files.
 
+IRSYNC_INI_FILENAM ='irsync.ini'
+INISEC_last_success_dirpath = 'last_success_dirpath'
+
 class MsgLevel(IntEnum):
 	err = 1
 	warn = 2
@@ -48,6 +51,10 @@ class irsync_st:
 	@property
 	def master_logfile_lck(self):
 		return self.master_logfile + ".lck"
+
+	@property
+	def ini_filepath(self):
+		return os.path.join(self.local_store_dir, IRSYNC_INI_FILENAM)
 
 	def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 
@@ -293,9 +300,18 @@ Detail: %s
 
 		try:
 			os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
-			os.rename(self.working_dirpath, self.finish_dirpath)
+			os.rename(self.working_dirpath, self.finish_dirpath) # move and rename the dir
 		except OSError:
 			raise Err_irsync("Error: Irsync session succeeded, but fail to move working directory to finish directory.")
+
+		# Record [last_success_dirpath] into rsync.ini
+		try:
+			WriteIniItem(self.ini_filepath, INISEC_last_success_dirpath,
+		             self.ushelf_name, self.finish_dirpath)
+		except OSError:
+			raise Err_irsync('Error: Cannot record [%s] information into file "%s"'%(
+				INISEC_last_success_dirpath, self.ini_filepath))
+
 
 		self.master_logfile_end()
 

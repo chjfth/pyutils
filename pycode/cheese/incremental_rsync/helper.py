@@ -33,6 +33,7 @@ def WriteIniItem(ini_filepath, section, itemname, itemval):
 
 if __name__=='__main__':
 	inifp = 'irsync.ini'
+	ret = ReadIniItem(inifp, 'last_success_dirpath', '192.168.11.1~1873.shelf1')
 	WriteIniItem(inifp, 'sect1', 'item1', 'value10')
 	WriteIniItem(inifp, 'sect1', 'item2', 'value20')
 	ret = ReadIniItem(inifp, 'sect1', 'item2')
