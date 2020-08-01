@@ -5,6 +5,7 @@
 
 import os, sys, re
 import datetime
+import traceback
 from enum import Enum,IntEnum # since Python 3.4
 from collections import namedtuple
 
@@ -146,7 +147,7 @@ Detail: %s
 			exit(4)
 
 		self.master_logfh = open(self.master_logfile, "a")
-		self.master_logfh.write("\n~\n") # We don't want timestamp on this linesep char
+		self.master_logfh.write("\n"+ "~"*78 +"\n") # We don't want timestamp on this linesep char
 
 		self.prn_masterlog("""Irsync session start.
     rsync_url:                {}
@@ -160,12 +161,27 @@ Detail: %s
 		)
 		return
 
-	def master_logfile_end(self):
-		self.prn_masterlog('Irsync session success. Get your backup at "%s"'%(self.finish_dirpath))
+	def master_logfile_end(self, is_succ):
+
+		if is_succ:
+			self.prn_masterlog('Irsync session success. Get your backup at "%s"'%(self.finish_dirpath))
+		else:
+			self.prn_masterlog('Irsync session fail.')
 		## todo: Tell extra info like time used etc.
 
 		self.master_filelock.unlock()
 		self.master_logfh.close()
+
+	def log_finalize_due_to_exception(self, excpt_text):
+		self.prn_masterlog(excpt_text)
+
+		self.prn_masterlog("""Irsync session stopped due to exception above! 
+    Check session logfile at:
+        %s
+    Partial backup may be found at:
+        %s""" % (self.sess_logfile, self.working_dirpath))
+
+		self.master_logfile_end(False)
 
 	@property
 	def loglevel(self):
@@ -287,8 +303,12 @@ Detail: %s
 		if exitcode==0:
 			self.info("Rsync run success.")
 		else:
-			self.warn("Rsync run fail, exitcode=%d"%(exitcode))
-			raise Err_rsync_exec(exitcode, self.ushelf_name)
+			# Use warn(instead of error) here, bcz I do not consider it the FINAL error.
+			self.warn("""Rsync run fail, exitcode=%d
+    To know detailed reason. Check rsync console message log at:
+        %s"""%(exitcode, fp_rsync))
+
+			raise Err_rsync_exec(exitcode, self.ushelf_name) # The caller may retry rsync.exe later
 		
 		self.info("irsync session - run() end")
 
@@ -312,8 +332,7 @@ Detail: %s
 			raise Err_irsync('Error: Cannot record [%s] information into file "%s"'%(
 				INISEC_last_success_dirpath, self.ini_filepath))
 
-
-		self.master_logfile_end()
+		self.master_logfile_end(True)
 
 def _check_rsync_url(url):
 	# url should be rsync://<server>/<srcmodule>
@@ -331,8 +350,12 @@ def irsync_fetch_once(rsync_url, local_store_dir, local_shelf="", datetime_patte
 	_check_rsync_url(rsync_url)
 	
 	irs = irsync_st(rsync_url, local_store_dir, local_shelf, datetime_pattern, **args)
+	try:
+		irs.run()
+	except:
+		exc_string = traceback.format_exc()
+		irs.log_finalize_due_to_exception(exc_string)
+		raise
 
-	irs.run()
-	
 	return True
 	
