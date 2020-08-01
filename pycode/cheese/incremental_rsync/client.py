@@ -4,7 +4,7 @@
 # print("[%s] __name__=%s"%(__file__,__name__))
 
 import os, sys, re
-import datetime
+import time, datetime
 import traceback
 from enum import Enum,IntEnum # since Python 3.4
 from collections import namedtuple
@@ -14,7 +14,7 @@ from cheese.filelock.assistive_filelock import AsFilelock, Err_asfilelock
 from .share import *
 from .helper import *
 
-LOG_NOD = 'logs' # as directory node name for storing log files.
+LOG_NOD = '__logs__' # as directory node name for storing log files.
 
 IRSYNC_INI_FILENAM ='irsync.ini'
 INISEC_last_success_dirpath = 'last_success_dirpath'
@@ -54,6 +54,10 @@ class irsync_st:
 		return self.master_logfile + ".lck"
 
 	@property
+	def sess_logfile_success(self):
+		return self.sess_logfile.replace(self.working_dirpath, self.finish_dirpath)
+
+	@property
 	def ini_filepath(self):
 		return os.path.join(self.local_store_dir, IRSYNC_INI_FILENAM)
 
@@ -68,6 +72,8 @@ class irsync_st:
 
 		if datetime_pattern.find(' ')>=0:
 			raise Err_irsync("Error: You assign datetime_pattern='%s', which contains space."%(datetime_pattern))
+
+		self.uesec_start = time.time()
 
 		#
 		# Set default working parameters.
@@ -163,11 +169,22 @@ Detail: %s
 
 	def master_logfile_end(self, is_succ):
 
+		uesec_end = time.time()
+		run_seconds = int(uesec_end - self.uesec_start)
+
+		runtime = "(Run-time: %d seconds =%dh,%dm,%ss)"%(run_seconds,
+			run_seconds/3600, run_seconds%3600/60, run_seconds%(3600*60))
+
 		if is_succ:
-			self.prn_masterlog('Irsync session success. Get your backup at "%s"'%(self.finish_dirpath))
+			self.prn_masterlog("""Irsync session success. 
+    Get your backup at:
+        %s
+    Session log file  :
+        %s"""%(self.finish_dirpath, self.sess_logfile_success))
+
+			self.prn_masterlog('Irsync session success. %s'%(runtime))
 		else:
-			self.prn_masterlog('Irsync session fail.')
-		## todo: Tell extra info like time used etc.
+			self.prn_masterlog('Irsync session fail. %s'%(runtime))
 
 		self.master_filelock.unlock()
 		self.master_logfh.close()
@@ -261,7 +278,7 @@ Detail: %s
     (finish)  : {}
 """.format      (
 				self.sess_logfile,
-				self.sess_logfile.replace(self.working_dirpath, self.finish_dirpath)
+				self.sess_logfile_success
 				)
 			)
 		except:
@@ -271,14 +288,30 @@ Detail: %s
 
 		self.info("irsync session - run() start")
 
+		# Check whether last-success dir exists
+		#
+		last_succ_dirpath = ReadIniItem(self.ini_filepath, INISEC_last_success_dirpath, self.ushelf_name)
+		if last_succ_dirpath:
+			if os.path.isdir(last_succ_dirpath):
+				self.info('Accelerate with last-success dirpath: "%s"'%(last_succ_dirpath))
+			else:
+				self.warn('INI recorded last-success dirpath NOT exist: "%s"'%(last_succ_dirpath))
+				last_succ_dirpath = ""
+
+		exp = [] # rsync extra parameters
+		if last_succ_dirpath:
+			exp.append('--link-dest="%s"'%(last_succ_dirpath))
+
+		extra_params = ' '.join(exp)
+
 		os.makedirs(self.working_dirpath, exist_ok=True)
-		
+
 		line_sep78 = '='*78
 		
 		#
 		# Run rsync exe and capture its output to log file.
 		#
-		rsync_cmd = "rsync --progress -v -a %s %s"%(self.rsync_url, self.working_dirpath)
+		rsync_cmd = "rsync -av --progress %s %s %s"%(extra_params, self.rsync_url, self.working_dirpath)
 		#
 		# If irsync session logfile(self.sess_logfile) is 20200414.run0.log,
 		# We will create rsync logfile with pattern 20200414.run0.rsync*.log ,
@@ -286,7 +319,7 @@ Detail: %s
 		rsync_logfile_pattern = '.rsync*'.join(os.path.splitext(self.sess_logfile))
 		fp_rsync, fh_rsync = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
 		#
-		self.info(""":
+		self.info("""Launching rsync subprocess:
   Now running  : %s
   With log file: %s (in same directory as this one)
 %s
