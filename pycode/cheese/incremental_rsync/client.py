@@ -25,6 +25,21 @@ class MsgLevel(IntEnum):
 	info = 3
 	dbg = 4
 
+def check_rsync_params_conflict(irsync_args, rsync_params):
+	conflicts = (
+		'--compare-dest', # would cause existing files in old-backup-dir to not appear in new-backup-dir.
+	    '--copy-dest',
+	    '--link-dest',  # this is set by irsync automatically
+	    )
+	clist = []
+	for conflict in conflicts:
+		if conflict in rsync_params:
+			clist.append(conflict)
+	if clist:
+		raise Err_irsync("Error: The following rsync native parameters are not allowed for irsync operation: %s"%(
+			' , '.join(clist)
+		))
+
 class irsync_st:
 
 	pfxMsgLevel = [""]*5
@@ -35,14 +50,17 @@ class irsync_st:
 	
 	datetime_pattern_default = "YYYYMMDD.hhmmss"
 	
-	def _save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name):
+	def _save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name, check_valid=None):
 		if argname in args:
 			argval = args[argname]
 			if type(argval) != selfattr_desiredtype: # check argument type validity
 				raise Err_irsync("You passed a wrong type to irsync initializing parameter '%s'. Desired type is '%s'."%(
 					argname, 
 					"%s.%s"%(selfattr_desiredtype.__module__, selfattr_desiredtype.__name__) # sample: cheese.incremental_rsync.client.MsgLevel
-					)) 
+					))
+			if check_valid:
+				check_valid(args, argval)
+			# This argument is ok, set it as object attribute.
 			setattr(self, selfattr_name, argval)
 
 	@property
@@ -66,14 +84,14 @@ class irsync_st:
 		# [local_store_dir]/[datetime_vault]/[server.local_shelf] becomes final target dir for rsync.
 		# [server.local_shelf] is called [ushelf] for brevity.
 
+		self.uesec_start = time.time()
+
 		#
 		# Some parameter validity checking.
 		#
 
 		if datetime_pattern.find(' ')>=0:
 			raise Err_irsync("Error: You assign datetime_pattern='%s', which contains space."%(datetime_pattern))
-
-		self.uesec_start = time.time()
 
 		#
 		# Set default working parameters.
@@ -92,6 +110,7 @@ class irsync_st:
 		# Process extra optional arguments
 		#
 		self._save_extra_args(args, 'loglevel', MsgLevel, '_loglevel')
+		self._save_extra_args(args, 'rsync_extra_params', str, '_rsync_extra_params', check_rsync_params_conflict)
 	
 		#
 		# prepare some static working data
@@ -120,8 +139,8 @@ class irsync_st:
 			# The dirpath consists of three parts:
 			# local_store_dir / datetime_vault / ushelf_name
 
-		# Backup content transferring is first conveyed into a .working folder, and upon transfer finish,
-		# it will then be moved into its finish_dirpath, for the purpose of being atomic.
+		# Backup content transferring is first stashed into a .working folder, and upon transfer finish,
+		# it will then be moved to its finish_dirpath, for the purpose of being atomic.
 		# Memo: I place .working folder directly at local_store_dir(instead of in datetime_vault subfolder)
 		# for easy eye-catching.
 		#
@@ -146,11 +165,10 @@ class irsync_st:
 			self.master_filelock.lock()
 		except Err_asfilelock as e:
 			# We have no logfile to write here, so just print to stderr.
-			sys.stderr.write("""
-Error:  Cannot acquire lock on local_store_dir "%s", so I cannot continue.      
-Detail: %s
+			# Translate to Err_irsync exception
+			raise Err_irsync("""Error:  Cannot acquire lock on local_store_dir "%s", so I cannot continue.      
+    Detail: %s
 """%(self.local_store_dir, e.errmsg))
-			exit(4)
 
 		self.master_logfh = open(self.master_logfile, "a")
 		self.master_logfh.write("\n"+ "~"*78 +"\n") # We don't want timestamp on this linesep char
@@ -302,7 +320,7 @@ Detail: %s
 		if last_succ_dirpath:
 			exp.append('--link-dest="%s"'%(last_succ_dirpath))
 
-		extra_params = ' '.join(exp)
+		extra_params_by_irsync = ' '.join(exp)
 
 		os.makedirs(self.working_dirpath, exist_ok=True)
 
@@ -311,7 +329,14 @@ Detail: %s
 		#
 		# Run rsync exe and capture its output to log file.
 		#
-		rsync_cmd = "rsync -av --progress %s %s %s"%(extra_params, self.rsync_url, self.working_dirpath)
+		rsync_cmd = "rsync -av "
+		#
+		if extra_params_by_irsync:
+			rsync_cmd += extra_params_by_irsync + " "
+		if self._rsync_extra_params:
+			rsync_cmd += self._rsync_extra_params + " "
+		#
+		rsync_cmd += "%s %s"%(self.rsync_url, self.working_dirpath)
 		#
 		# If irsync session logfile(self.sess_logfile) is 20200414.run0.log,
 		# We will create rsync logfile with pattern 20200414.run0.rsync*.log ,

@@ -17,6 +17,7 @@ if __name__=='__main__':
 
 	ret = irsync_fetch_once("rsync://192.168.11.1:1873/mys", ".", "shelf1",
 		datetime_pattern="YYYYMMDD-hhmmss",
+		rsync_extra_params="--progress",
 #		loglevel=11, #MsgLevel.warn,
 		_=None)
 	print(ret)
