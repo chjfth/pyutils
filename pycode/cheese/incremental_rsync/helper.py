@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os, sys
+import shutil
 import configparser # ini operation
 from . import share
 
@@ -29,6 +30,19 @@ def WriteIniItem(ini_filepath, section, itemname, itemval):
 
 	with open(ini_filepath, 'w') as inifile:
 		iniobj.write(inifile)
+
+
+def Seconds_to_DHM(seconds):
+	minutes = seconds//60
+	hours = minutes//60
+	days = hours//24
+	return (days, hours%24, minutes%60)
+
+def RemoveDir_IfEmpty(dirpath):
+	dir_parent = os.path.dirname(dirpath)
+	files = os.listdir(dir_parent)
+	if len(files)==0:
+		os.rmdir(dir_parent)
 
 
 if __name__=='__main__':

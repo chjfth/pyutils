@@ -5,6 +5,7 @@
 
 import os, sys, re
 import time, datetime
+import shutil
 import traceback
 from enum import Enum,IntEnum # since Python 3.4
 from collections import namedtuple
@@ -16,8 +17,13 @@ from .helper import *
 
 LOG_NOD = '__logs__' # as directory node name for storing log files.
 
-IRSYNC_INI_FILENAM ='irsync.ini'
+ININAM_irsync_master = 'irsync.ini'
 INISEC_last_success_dirpath = 'last_success_dirpath'
+#
+ININAM_sess_done = 'backup_done.ini'
+INISEC_sess_done = 'backup_done'
+INIKEY_utc = 'utc'
+INIKEY_localtime = 'localtime'
 
 class MsgLevel(IntEnum):
 	err = 1
@@ -25,7 +31,8 @@ class MsgLevel(IntEnum):
 	info = 3
 	dbg = 4
 
-def check_rsync_params_conflict(irsync_args, rsync_params):
+def check_rsync_params_conflict(irsync_args, argname, rsync_raw_params):
+	# yes, irsync_args not used
 	conflicts = (
 		'--compare-dest', # would cause existing files in old-backup-dir to not appear in new-backup-dir.
 	    '--copy-dest',
@@ -33,12 +40,16 @@ def check_rsync_params_conflict(irsync_args, rsync_params):
 	    )
 	clist = []
 	for conflict in conflicts:
-		if conflict in rsync_params:
+		if conflict in rsync_raw_params:
 			clist.append(conflict)
 	if clist:
 		raise Err_irsync("Error: The following rsync native parameters are not allowed for irsync operation: %s"%(
 			' , '.join(clist)
 		))
+
+def value_not_negative(irsync_args, argname, argval):
+	if argval<0:
+		raise Err_irsync("Error: The parameter(%s) must not be a negative value(%d)."%(argname, argval))
 
 class irsync_st:
 
@@ -50,7 +61,21 @@ class irsync_st:
 	
 	datetime_pattern_default = "YYYYMMDD.hhmmss"
 	
-	def _save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name, check_valid=None):
+	def _save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name, fn_check_valid=None, *fn_args):
+		""" Search args[] for a param named argname. If found, validate it and save it as self's attribute.
+
+		:param args: User input params, a dict. There may be valid ones and invalid ones.
+
+		:param argname: an Irsync parameter name spec.
+		:param selfattr_desiredtype: Desired/Valid type for the `argname`.
+
+		:param selfattr_name:  For the `argname`, what attribute should we set for it.
+
+		:param fn_check_valid: the function to validate `argname`'s value
+		:param fn_args: Extra params passed to fn_check_valid()
+
+		:return: On error, raise some exception
+		"""
 		if argname in args:
 			argval = args[argname]
 			if type(argval) != selfattr_desiredtype: # check argument type validity
@@ -58,10 +83,17 @@ class irsync_st:
 					argname, 
 					"%s.%s"%(selfattr_desiredtype.__module__, selfattr_desiredtype.__name__) # sample: cheese.incremental_rsync.client.MsgLevel
 					))
-			if check_valid:
-				check_valid(args, argval)
+			if fn_check_valid:
+				fn_check_valid(args, argname, argval, *fn_args) # if error, should raise exception inside
+
 			# This argument is ok, set it as object attribute.
 			setattr(self, selfattr_name, argval)
+		else:
+			# Set default values for various types
+			if selfattr_desiredtype==int:
+				setattr(self, selfattr_name, 0)
+			elif selfattr_desiredtype==str:
+				setattr(self, selfattr_name, '')
 
 	@property
 	def master_logfile(self):
@@ -77,7 +109,11 @@ class irsync_st:
 
 	@property
 	def ini_filepath(self):
-		return os.path.join(self.local_store_dir, IRSYNC_INI_FILENAM)
+		return os.path.join(self.local_store_dir, ININAM_irsync_master)
+
+	@property
+	def sess_done_ini_filepath(self):
+		return os.path.join(self.working_dirpath, ININAM_sess_done)
 
 	def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 
@@ -111,7 +147,10 @@ class irsync_st:
 		#
 		self._save_extra_args(args, 'loglevel', MsgLevel, '_loglevel')
 		self._save_extra_args(args, 'rsync_extra_params', str, '_rsync_extra_params', check_rsync_params_conflict)
-	
+		self._save_extra_args(args, 'old_days', int, '_old_days', value_not_negative)
+		self._save_extra_args(args, 'old_hours', int, '_old_hours', value_not_negative)
+		self._save_extra_args(args, 'old_minutes', int, '_old_minutes', value_not_negative)
+
 		#
 		# prepare some static working data
 		#
@@ -269,6 +308,65 @@ class irsync_st:
 	def prn_start_info(self):
 		pass
 
+	def sess_done_write_timestamp(self):
+		uesec = int(time.time())
+		tmlocal = time.localtime(uesec)
+		localtime_str = time.strftime("%Y-%m-%d %H:%M:%S", tmlocal)
+
+		ini_content = [
+			(INIKEY_utc, str(uesec)),
+			(INIKEY_localtime, localtime_str)
+		]
+		for t in ini_content:
+			WriteIniItem(self.sess_done_ini_filepath, INISEC_sess_done, t[0], t[1])
+
+	def y_find_existing_ushelf(self):
+		# A backup_done.ini file identifies a ushelf directory.
+		# And, I will check backup_done.ini only in second-depth subdirs.
+		root_start = self.local_store_dir
+		for root, dirs, files in os.walk(root_start):
+			dirnods = root.replace(root_start, '', 1) # strip root_start prefix
+#			print('dirnods='+dirnods) # debug
+			if(dirnods.count(os.sep)==2):
+				# now we are at the a second-depth subdir
+				if ININAM_sess_done in files:
+					uesec_str = ReadIniItem(os.path.join(root, ININAM_sess_done),
+					                        INISEC_sess_done, INIKEY_utc)
+					try:
+						uesec = int(uesec_str)
+#						print("%d @ %s" % (uesec, root)) # debug
+						yield uesec, root
+					except ValueError:
+						pass # ignore it
+
+				dirs.clear()    # so will not descend any further
+
+	def remove_old_ushelfs(self):
+		sec_keep = ((self._old_days*24+self._old_hours)*60+self._old_minutes)*60
+		if sec_keep<=0:
+			return
+
+		self.prn_masterlog("User request removing backups older than %d days, %d hours, %d minutes."%(
+			self._old_days, self._old_hours, self._old_minutes
+		))
+
+		delete_count = 0
+		uesec_new = int(time.time())
+		for uesec_old, dirpath_old in self.y_find_existing_ushelf():
+			sec_stale = uesec_new - uesec_old
+			if sec_stale > sec_keep:
+				str_DHM = "{} days, {} hours, {} minutes".format(*Seconds_to_DHM(sec_stale))
+				self.prn_masterlog("""Removing old backup at: (created %s ago (%d seconds stale))
+    %s"""%(str_DHM, sec_stale, dirpath_old))
+				shutil.rmtree(dirpath_old)
+				delete_count +=1
+				RemoveDir_IfEmpty(dirpath_old)
+
+
+		if delete_count==0:
+			self.prn_masterlog("No backups are stale, not removing them this time.")
+
+
 	def run(self):
 		"""
 		Return normally on success, raise Exception on error.
@@ -284,6 +382,8 @@ class irsync_st:
 			else:
 				self.err("I need to create backup directory '%s', but it appears to be a file in the way."%(
 					self.finish_dirpath))
+
+		self.remove_old_ushelfs()
 
 		# Create session logging filename and save its handle. If error, raise exception.
 		#
@@ -375,6 +475,8 @@ class irsync_st:
 		fh_rsync.close()
 		self.logfh.close()
 		self.logfh = None
+
+		self.sess_done_write_timestamp()
 
 		try:
 			os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
