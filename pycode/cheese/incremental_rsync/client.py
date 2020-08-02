@@ -5,7 +5,7 @@
 
 import os, sys, re
 import time, datetime
-import shutil
+import shutil, shlex
 import traceback
 from enum import Enum,IntEnum # since Python 3.4
 from collections import namedtuple
@@ -59,7 +59,7 @@ class irsync_st:
 	pfxMsgLevel[MsgLevel.info.value] = "[INFO]"
 	pfxMsgLevel[MsgLevel.dbg.value] = "[DBG]"
 	
-	datetime_pattern_default = "YYYYMMDD.hhmmss"
+	datetime_pattern_default = "YYYYMMDD"
 	
 	def _save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name, fn_check_valid=None, *fn_args):
 		""" Search args[] for a param named argname. If found, validate it and save it as self's attribute.
@@ -123,20 +123,16 @@ class irsync_st:
 		self.uesec_start = time.time()
 
 		#
-		# Some parameter validity checking.
-		#
-
-		if datetime_pattern.find(' ')>=0:
-			raise Err_irsync("Error: You assign datetime_pattern='%s', which contains space."%(datetime_pattern))
-
-		#
-		# Set default working parameters.
+		# Set some default working parameters.
 		#
 		
 		self.rsync_url = rsync_url
 		self.local_store_dir = os.path.abspath(local_store_dir)
 		self.datetime_pattern = datetime_pattern if datetime_pattern else __class__.datetime_pattern_default
-	
+
+		if self.datetime_pattern.find(' ')>=0:
+			raise Err_irsync("Error: You assign datetime_pattern='%s', which contains space."%(datetime_pattern))
+
 		if not local_shelf:
 			pass # later: will set to final word(token) of rsync url
 
@@ -146,7 +142,7 @@ class irsync_st:
 		# Process extra optional arguments
 		#
 		self._save_extra_args(args, 'loglevel', MsgLevel, '_loglevel')
-		self._save_extra_args(args, 'rsync_extra_params', str, '_rsync_extra_params', check_rsync_params_conflict)
+		self._save_extra_args(args, 'rsync_extra_params', list, '_rsync_extra_params', check_rsync_params_conflict)
 		self._save_extra_args(args, 'old_days', int, '_old_days', value_not_negative)
 		self._save_extra_args(args, 'old_hours', int, '_old_hours', value_not_negative)
 		self._save_extra_args(args, 'old_minutes', int, '_old_minutes', value_not_negative)
@@ -273,13 +269,15 @@ class irsync_st:
 
 	def prn(self, msglevel, msg):
 
+		self.lastlog_datetime_str = datetime_now_str()
+
 		if self.loglevel.value < msglevel.value:
 			return
 
 		lvn = msglevel.value
 		lvs = __class__.pfxMsgLevel[lvn]
 		
-		msgline = "[%s]%s %s\n"%(datetime_now_str(), lvs , msg)
+		msgline = "[%s]%s %s\n"%(self.lastlog_datetime_str, lvs , msg)
 		
 		self.logfh.write(msgline)
 		print(msgline, end="")
@@ -416,47 +414,56 @@ class irsync_st:
 				self.warn('INI recorded last-success dirpath NOT exist: "%s"'%(last_succ_dirpath))
 				last_succ_dirpath = ""
 
-		exp = [] # rsync extra parameters
-		if last_succ_dirpath:
-			exp.append('--link-dest="%s"'%(last_succ_dirpath))
-
-		extra_params_by_irsync = ' '.join(exp)
-
 		os.makedirs(self.working_dirpath, exist_ok=True)
+		line_sep78 = '=' * 78
 
-		line_sep78 = '='*78
-		
 		#
-		# Run rsync exe and capture its output to log file.
+		# Prepare rsync subprocess parameters...
+		# and we'll use argv[] to spawn subprocess, not bothering sh/bash command line.
 		#
-		rsync_cmd = "rsync -av "
-		#
-		if extra_params_by_irsync:
-			rsync_cmd += extra_params_by_irsync + " "
+		rsync_argv = ["rsync", "-av"]
+
+		if last_succ_dirpath:
+			# no need to surround the path with quotes, even if it contains spaces
+			rsync_argv.append('--link-dest=%s'%(last_succ_dirpath))
+
 		if self._rsync_extra_params:
-			rsync_cmd += self._rsync_extra_params + " "
-		#
-		rsync_cmd += "%s %s"%(self.rsync_url, self.working_dirpath)
+			rsync_argv.extend(self._rsync_extra_params)
+
+		# Finally, append rsync-source and rsync-destination
+		rsync_argv.extend([self.rsync_url, self.working_dirpath])
+
+		# Create logfile for rsync-subprocess's console output message.
 		#
 		# If irsync session logfile(self.sess_logfile) is 20200414.run0.log,
 		# We will create rsync logfile with pattern 20200414.run0.rsync*.log ,
 		# so that we know the "...rsync0.log", "...rsync1.log" belongs to run0.
+		#
 		rsync_logfile_pattern = '.rsync*'.join(os.path.splitext(self.sess_logfile))
 		fp_rsync, fh_rsync = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
-		#
-		self.info("""Launching rsync subprocess:
-  Now running  : %s
-  With log file: %s (in same directory as this one)
+
+		# Construct subprocess startup log text:
+		argv_hint_lines = ["{0}argv[{1}] = {2}".format(' '*8, i, s) for i,s in enumerate(rsync_argv)]
+		shell_cmd = ' '.join([shlex.quote(onearg) for onearg in rsync_argv])
+		self.info("""Launching rsync subprocess with argv[]:
 %s
-"""%(rsync_cmd, os.path.basename(fp_rsync), line_sep78))
+    The corresponding shell command line is (for your manual debugging):
+        %s
+    With log file: %s (in same directory as this one)
+%s
+"""%(
+			'\n'.join(argv_hint_lines),
+			shell_cmd,
+			os.path.basename(fp_rsync),
+			line_sep78))
 		#
 		# Add some banner text at start of fp_rsync.
 		fh_rsync.write("""[%s] This is the console output log of shell command:
     %s
 %s
-"""%(datetime_now_str(), rsync_cmd, line_sep78))
+"""%(self.lastlog_datetime_str, shell_cmd, line_sep78))
 		#
-		exitcode = run_exe_log_output_and_print(rsync_cmd, {"shell":True}, fh_rsync)
+		exitcode = run_exe_log_output_and_print(rsync_argv, {"shell":False}, fh_rsync)
 		
 		if exitcode==0:
 			self.info("Rsync run success.")

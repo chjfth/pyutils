@@ -43,7 +43,7 @@ def datetime_by_pattern(pattern):
 	dt = dt.replace("MM", "%02d"%(now.month))
 	dt = dt.replace("DD", "%02d"%(now.day))
 	dt = dt.replace("hh", "%02d"%(now.hour))
-	dt = dt.replace("mm", "%02d"%(now.minute))
+	dt = dt.replace("mm", "%02d"%(now.minute)) # use lower-case mm so not to conflict with Month
 	dt = dt.replace("ss", "%02d"%(now.second))
 	return dt
 
