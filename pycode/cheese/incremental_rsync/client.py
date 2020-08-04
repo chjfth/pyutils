@@ -146,6 +146,8 @@ class irsync_st:
 		self._save_extra_args(args, 'old_days', int, '_old_days', value_not_negative)
 		self._save_extra_args(args, 'old_hours', int, '_old_hours', value_not_negative)
 		self._save_extra_args(args, 'old_minutes', int, '_old_minutes', value_not_negative)
+		self._save_extra_args(args, 'max_retry', int, '_max_retry', value_not_negative)
+		self._save_extra_args(args, 'max_run_seconds', int, '_max_run_seconds', value_not_negative)
 
 		#
 		# prepare some static working data
@@ -279,7 +281,7 @@ class irsync_st:
 		
 		msgline = "[%s]%s %s\n"%(self.lastlog_datetime_str, lvs , msg)
 		
-		self.logfh.write(msgline)
+		self.sess_logfh.write(msgline)
 		print(msgline, end="")
 
 	def err(self, msg):
@@ -365,7 +367,7 @@ class irsync_st:
 			self.prn_masterlog("No backups are stale, not removing them this time.")
 
 
-	def run(self):
+	def run_irsync_session_once(self):
 		"""
 		Return normally on success, raise Exception on error.
 		"""
@@ -386,7 +388,7 @@ class irsync_st:
 		# Create session logging filename and save its handle. If error, raise exception.
 		#
 		try:
-			self.sess_logfile, self.logfh = self.create_logfile()
+			self.sess_logfile, self.sess_logfh = self.create_logfile()
 			sesslog_d, sesslog_n = os.path.split(self.sess_logfile)
 			assert( sesslog_d.startswith(self.working_dirpath) ) # sesslog_d has an extra 'logs' subdir
 			self.prn_masterlog("""Session logfile can be found at:
@@ -411,77 +413,30 @@ class irsync_st:
 			if os.path.isdir(last_succ_dirpath):
 				self.info('Accelerate with last-success dirpath: "%s"'%(last_succ_dirpath))
 			else:
-				self.warn('INI recorded last-success dirpath NOT exist: "%s"'%(last_succ_dirpath))
+				self.warn('INI recorded last-success dirpath NOT exists: "%s"'%(last_succ_dirpath))
 				last_succ_dirpath = ""
 
 		os.makedirs(self.working_dirpath, exist_ok=True)
-		line_sep78 = '=' * 78
 
-		#
-		# Prepare rsync subprocess parameters...
-		# and we'll use argv[] to spawn subprocess, not bothering sh/bash command line.
-		#
-		rsync_argv = ["rsync", "-av"]
+		now_retry = 0
+		while True:
+			try:
+				self.call_rsync_subprocess_once(last_succ_dirpath)
+				break # bcz we succeeded
+			except Err_rsync_exec:
+				now_retry += 1
 
-		if last_succ_dirpath:
-			# no need to surround the path with quotes, even if it contains spaces
-			rsync_argv.append('--link-dest=%s'%(last_succ_dirpath))
+				if now_retry > self._max_retry:
+					if self._max_retry > 0:
+						self.warn("The rsync retrying count %d all exhausted."%(self._max_retry))
+					raise # failure
 
-		if self._rsync_extra_params:
-			rsync_argv.extend(self._rsync_extra_params)
+				self.warn("Retrying rsync subprocess %d/%d ..."%(now_retry, self._max_retry))
+				time.sleep(1.0)
 
-		# Finally, append rsync-source and rsync-destination
-		rsync_argv.extend([self.rsync_url, self.working_dirpath])
 
-		# Create logfile for rsync-subprocess's console output message.
-		#
-		# If irsync session logfile(self.sess_logfile) is 20200414.run0.log,
-		# We will create rsync logfile with pattern 20200414.run0.rsync*.log ,
-		# so that we know the "...rsync0.log", "...rsync1.log" belongs to run0.
-		#
-		rsync_logfile_pattern = '.rsync*'.join(os.path.splitext(self.sess_logfile))
-		fp_rsync, fh_rsync = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
-
-		# Construct subprocess startup log text:
-		argv_hint_lines = ["{0}argv[{1}] = {2}".format(' '*8, i, s) for i,s in enumerate(rsync_argv)]
-		shell_cmd = ' '.join([shlex.quote(onearg) for onearg in rsync_argv])
-		self.info("""Launching rsync subprocess with argv[]:
-%s
-    The corresponding shell command line is (for your manual debugging):
-        %s
-    With log file: %s (in same directory as this one)
-%s
-"""%(
-			'\n'.join(argv_hint_lines),
-			shell_cmd,
-			os.path.basename(fp_rsync),
-			line_sep78))
-		#
-		# Add some banner text at start of fp_rsync.
-		fh_rsync.write("""[%s] This is the console output log of shell command:
-    %s
-%s
-"""%(self.lastlog_datetime_str, shell_cmd, line_sep78))
-		#
-		exitcode = run_exe_log_output_and_print(rsync_argv, {"shell":False}, fh_rsync)
-		
-		if exitcode==0:
-			self.info("Rsync run success.")
-		else:
-			# Use warn(instead of error) here, bcz I do not consider it the FINAL error.
-			self.warn("""Rsync run fail, exitcode=%d
-    To know detailed reason. Check rsync console message log at:
-        %s"""%(exitcode, fp_rsync))
-
-			raise Err_rsync_exec(exitcode, self.ushelf_name) # The caller may retry rsync.exe later
-		
-		self.info("irsync session - run() end")
-
-		# Move .working-directory into finish-directory
-		#
-		fh_rsync.close()
-		self.logfh.close()
-		self.logfh = None
+		self.sess_logfh.close()
+		self.sess_logfh = None
 
 		self.sess_done_write_timestamp()
 
@@ -501,6 +456,74 @@ class irsync_st:
 
 		self.master_logfile_end(True)
 
+	def call_rsync_subprocess_once(self, last_succ_dirpath):
+
+		line_sep78 = '=' * 78
+		#
+		# Prepare rsync subprocess parameters...
+		# and we'll use argv[] to spawn subprocess, not bothering sh/bash command line.
+		#
+		rsync_argv = ["rsync", "-av"]
+
+		if last_succ_dirpath:
+			# no need to surround the path with quotes, even if it contains spaces
+			rsync_argv.append('--link-dest=%s' % (last_succ_dirpath))
+
+		if self._rsync_extra_params:
+			rsync_argv.extend(self._rsync_extra_params)
+
+		# Finally, append rsync-source and rsync-destination
+		rsync_argv.extend([self.rsync_url, self.working_dirpath])
+
+		# Create logfile for rsync-subprocess's console output message.
+		#
+		# If irsync session logfile(self.sess_logfile) is 20200414.run0.log,
+		# We will create rsync logfile with pattern 20200414.run0.rsync*.log ,
+		# so that we know the "...rsync0.log", "...rsync1.log" belongs to run0.
+		#
+		rsync_logfile_pattern = '.rsync*'.join(os.path.splitext(self.sess_logfile))
+		fp_rsync, fh_rsync = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
+
+		# Construct subprocess startup log text:
+		argv_hint_lines = ["{0}argv[{1}] = {2}".format(' ' * 8, i, s) for i, s in enumerate(rsync_argv)]
+		shell_cmd = ' '.join([shlex.quote(onearg) for onearg in rsync_argv])
+		self.info("""Launching rsync subprocess with argv[]:
+%s
+    The corresponding shell command line is (for your manual debugging):
+	    %s
+    With log file: %s (in same directory as this one)
+%s
+""" % (
+			'\n'.join(argv_hint_lines),
+			shell_cmd,
+			os.path.basename(fp_rsync),
+			line_sep78))
+		#
+		# Add some banner text at start of fp_rsync.
+		fh_rsync.write("""[%s] This is the console output log of shell command:
+    %s
+%s
+""" % (self.lastlog_datetime_str, shell_cmd, line_sep78))
+		#
+		exitcode = run_exe_log_output_and_print(rsync_argv, {"shell": False}, fh_rsync)
+
+		if exitcode == 0:
+			self.info("Rsync run success.")
+		else:
+			# Use warn(instead of error) here, bcz I do not consider it the FINAL error.
+			self.warn("""Rsync run fail, exitcode=%d
+    To know detailed reason. Check rsync console message log at:
+        %s""" % (exitcode, fp_rsync))
+
+			raise Err_rsync_exec(exitcode, self.ushelf_name)  # The caller may retry rsync.exe later
+
+		self.info("irsync session - run() end")
+
+		# Move .working-directory into finish-directory
+		#
+		fh_rsync.close()
+
+
 def _check_rsync_url(url):
 	# url should be rsync://<server>/<srcmodule>
 	m = re.match("rsync://([^/]+)/(.+)", url)
@@ -518,7 +541,7 @@ def irsync_fetch_once(rsync_url, local_store_dir, local_shelf="", datetime_patte
 	
 	irs = irsync_st(rsync_url, local_store_dir, local_shelf, datetime_pattern, **args)
 	try:
-		irs.run()
+		irs.run_irsync_session_once()
 	except:
 		exc_string = traceback.format_exc()
 		irs.log_finalize_due_to_exception(exc_string)

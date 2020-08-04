@@ -54,6 +54,16 @@ def init_irsync_argparser():
 		help='Add extra minutes to old days and old hours. This is mainly used for testing.'
 	)
 
+	ap.add_argument('--max-retry', type=int, dest='max_retry', default=0,
+		help='Assign max retry count for calling rsync subprocess. '
+	        'Default is 0, meaning irsync will call rsync subprocess only once, no retry.'
+	)
+	ap.add_argument('--max-run-seconds', type=int, dest='max_run_seconds', default=0,
+		help='Assign max seconds to run for a whole irsync session.'
+	        'Default value 0 means no time limit, and irsync will wait as long as rsync executes, '
+	        'and as many times as --max-retry is specified.'
+	)
+
 	ap.add_argument('--rsync', type=str, dest='rsync_extra_params',
 		help='Supply extra rsync parameters. \n'
 		    ' This option MUST appear finally on the command line, and its full content MUST not be wrapped by any quotes.'
@@ -96,6 +106,8 @@ def irsync_cmd():
 	    old_days=args.old_days,
 		old_hours=args.old_hours,
 		old_minutes=args.old_minutes,
+		max_retry=args.max_retry,
+		max_run_seconds=args.max_run_seconds,
 	    rsync_extra_params=rsync_extra_params)
 
 	pass
