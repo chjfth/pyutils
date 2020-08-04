@@ -364,7 +364,7 @@ class irsync_st:
 
 
 		if delete_count==0:
-			self.prn_masterlog("No backups are stale, not removing them this time.")
+			self.prn_masterlog("No backups are stale, leaving them alone this time.")
 
 
 	def run_irsync_session_once(self):
@@ -505,7 +505,7 @@ class irsync_st:
 %s
 """ % (self.lastlog_datetime_str, shell_cmd, line_sep78))
 		#
-		exitcode = run_exe_log_output_and_print(rsync_argv, {"shell": False}, fh_rsync)
+		exitcode = run_exe_log_output_and_print(rsync_argv, self._max_run_seconds, {"shell": False}, fh_rsync)
 
 		if exitcode == 0:
 			self.info("Rsync run success.")
