@@ -176,12 +176,17 @@ class irsync_st:
 		# Memo: I place .working folder directly at local_store_dir(instead of in datetime_vault subfolder)
 		# for easy eye-catching.
 		#
-		self.working_dirname = "{0}@[{1}].working".format(self.datetime_vault, self.ushelf_name)
+		self.working_dirname = "{0}[{1}].working".format(self.datetime_vault, self.ushelf_name)
 		self.working_dirpath = os.path.join(self.local_store_dir, self.working_dirname)
 		
 		# Previous-backup info enable us to do incremental backup.
 		#
 		self.prev_ushelf_inifile = os.path.join(self.local_store_dir, "[{}].prev".format(self.ushelf_name))
+
+		try:
+			os.makedirs(self.local_store_dir, exist_ok=True)
+		except OSError:
+			raise Err_irsync('Error: Cannot create local_store_dir "%s"'%(self.local_store_dir))
 
 		self.master_logfile_start()
 		return

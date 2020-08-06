@@ -34,7 +34,7 @@ def init_irsync_argparser():
 			'If not given explicitly, irsync generates a shelf name according to rsync URL, '
 	        'so that different URLs result in different shelf names.\n'
 	        'If you assign shelf name manually and have two rsync URLs mapping to the same shelf name, '
-	        'irsync will consider the two URLs belonging to same asset. That means, if you want one backup'
+	        'irsync will consider the two URLs belonging to same asset. That means, if you want one backup '
 	        'each day, and URL1 has been backed-up today, then URL2 will not get backed-up today, because '
 	        'irsync thinks that backup of that asset name has already been done today.'
 	)
