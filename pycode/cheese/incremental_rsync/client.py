@@ -25,13 +25,7 @@ INISEC_sess_done = 'backup_done'
 INIKEY_utc = 'utc'
 INIKEY_localtime = 'localtime'
 
-class MsgLevel(IntEnum):
-	err = 1
-	warn = 2
-	info = 3
-	dbg = 4
-
-def check_rsync_params_conflict(irsync_args, argname, rsync_raw_params):
+def check_rsync_params_conflict(rsync_raw_params):
 	# yes, irsync_args not used
 	conflicts = (
 		'--compare-dest', # would cause existing files in old-backup-dir to not appear in new-backup-dir.
@@ -61,7 +55,7 @@ class irsync_st:
 	
 	datetime_pattern_default = "YYYYMMDD"
 	
-	def _save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name, fn_check_valid=None, *fn_args):
+	def _nouse_save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name, fn_check_valid=None, *fn_args):
 		""" Search args[] for a param named argname. If found, validate it and save it as self's attribute.
 
 		:param args: User input params, a dict. There may be valid ones and invalid ones.
@@ -115,8 +109,11 @@ class irsync_st:
 	def sess_done_ini_filepath(self):
 		return os.path.join(self.working_dirpath, ININAM_sess_done)
 
-	def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
+	#def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
+	def __init__(self, apargs, rsync_extra_params):
 
+		# apargs is the argparse.ArgumentParser object that accommodates all user parameters.
+		#
 		# [local_store_dir]/[datetime_vault]/[server.local_shelf] becomes final target dir for rsync.
 		# [server.local_shelf] is called [ushelf] for brevity.
 
@@ -126,28 +123,24 @@ class irsync_st:
 		# Set some default working parameters.
 		#
 		
-		self.rsync_url = rsync_url
-		self.local_store_dir = os.path.abspath(local_store_dir)
-		self.datetime_pattern = datetime_pattern if datetime_pattern else __class__.datetime_pattern_default
+		self.rsync_url = apargs.rsync_url
+		self.local_store_dir = os.path.abspath(apargs.local_store_dir)
+		local_shelf = apargs.shelf # tune later
+		self.datetime_pattern = apargs.datetime_pattern if apargs.datetime_pattern else __class__.datetime_pattern_default
 
 		if self.datetime_pattern.find(' ')>=0:
-			raise Err_irsync("Error: You assign datetime_pattern='%s', which contains space."%(datetime_pattern))
+			raise Err_irsync("Error: You assign datetime_pattern='%s', which contains space."%(self.datetime_pattern))
 
-		if not local_shelf:
-			pass # later: will set to final word(token) of rsync url
-
-		self._loglevel = MsgLevel.info
-		
 		#
 		# Process extra optional arguments
 		#
-		self._save_extra_args(args, 'loglevel', MsgLevel, '_loglevel')
-		self._save_extra_args(args, 'rsync_extra_params', list, '_rsync_extra_params', check_rsync_params_conflict)
-		self._save_extra_args(args, 'old_days', int, '_old_days', value_not_negative)
-		self._save_extra_args(args, 'old_hours', int, '_old_hours', value_not_negative)
-		self._save_extra_args(args, 'old_minutes', int, '_old_minutes', value_not_negative)
-		self._save_extra_args(args, 'max_retry', int, '_max_retry', value_not_negative)
-		self._save_extra_args(args, 'max_run_seconds', int, '_max_run_seconds', value_not_negative)
+		self._loglevel = MsgLevel[apargs.msg_level] # string -> enum value  # self._save_extra_args(args, 'loglevel', MsgLevel, '_loglevel')
+		self._old_seconds = DHMS_to_Seconds(apargs.old_days, apargs.old_hours, apargs.old_minutes) #self._save_extra_args(args, 'old_seconds', int, '_old_seconds', value_not_negative)
+		self._max_retry = apargs.max_retry # self._save_extra_args(args, 'max_retry', int, '_max_retry', value_not_negative)
+		self._max_run_seconds = DHMS_to_Seconds(0, apargs.max_run_hours, apargs.max_run_minutes, apargs.max_run_seconds) # self._save_extra_args(args, 'max_run_seconds', int, '_max_run_seconds', value_not_negative)
+		#
+		self._rsync_extra_params = rsync_extra_params
+		check_rsync_params_conflict(rsync_extra_params)
 
 		#
 		# prepare some static working data
@@ -156,12 +149,14 @@ class irsync_st:
 		# combine server-name and shelf-name into `ushelf` name (货架标识符).
 		# 'u' implies unique, I name it so bcz I expect/hope it is unique within 
 		# a specific local_store_dir .
-		server, spath = _check_rsync_url(rsync_url)
+		server, spath = _check_rsync_url(self.rsync_url)
 		server_goodchars = server.replace(':', '~') # ":" is not valid Windows filename, so change it to ~
 
 		if not local_shelf:
 			local_shelf = spath.split("/")[-1] # final word of spath
-		
+
+		# TODO: ensure no / in shelf name
+
 		self.ushelf_name = "%s.%s"%(server_goodchars, local_shelf)
 		
 		# datetime_vault: this backup session's datetime-identified vault
@@ -227,8 +222,7 @@ class irsync_st:
 		uesec_end = time.time()
 		run_seconds = int(uesec_end - self.uesec_start)
 
-		runtime = "(Run-time: %d seconds =%dh,%dm,%ss)"%(run_seconds,
-			run_seconds/3600, run_seconds%3600/60, run_seconds%(3600*60))
+		runtime = "(Run-time: %d seconds =%dh,%dm,%ss)"%(run_seconds, *Seconds_to_DHMS(run_seconds)[1:4])
 
 		if is_succ:
 			self.prn_masterlog("""Irsync session success. 
@@ -342,12 +336,12 @@ class irsync_st:
 				dirs.clear()    # so will not descend any further
 
 	def remove_old_ushelfs(self):
-		sec_keep = ((self._old_days*24+self._old_hours)*60+self._old_minutes)*60
+		sec_keep = self._old_seconds
 		if sec_keep<=0:
 			return
 
-		self.prn_masterlog("User request removing backups older than %d days, %d hours, %d minutes."%(
-			self._old_days, self._old_hours, self._old_minutes
+		self.prn_masterlog("User requests removing backups older than %d days, %d hours, %d minutes."%(
+			Seconds_to_DHMS(sec_keep)[0:3]
 		))
 
 		delete_count = 0
@@ -355,7 +349,7 @@ class irsync_st:
 		for uesec_old, dirpath_old in self.y_find_existing_ushelf():
 			sec_stale = uesec_new - uesec_old
 			if sec_stale > sec_keep:
-				str_DHM = "{} days, {} hours, {} minutes".format(*Seconds_to_DHM(sec_stale))
+				str_DHM = "{} days, {} hours, {} minutes".format(*Seconds_to_DHMS(sec_stale)[0:3])
 				self.prn_masterlog("""Removing old backup at: (created %s ago (%d seconds stale))
     %s"""%(str_DHM, sec_stale, dirpath_old))
 				shutil.rmtree(dirpath_old)
@@ -535,11 +529,11 @@ def _check_rsync_url(url):
 
 
 
-def irsync_fetch_once(rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
+def irsync_fetch_once(apargs, rsync_extra_params):
 	
-	_check_rsync_url(rsync_url)
+	_check_rsync_url(apargs.rsync_url)
 	
-	irs = irsync_st(rsync_url, local_store_dir, local_shelf, datetime_pattern, **args)
+	irs = irsync_st(apargs, rsync_extra_params)
 	try:
 		irs.run_irsync_session_once()
 	except:

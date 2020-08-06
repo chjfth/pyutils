@@ -7,6 +7,13 @@ import os, subprocess
 import re
 import datetime
 import glob
+from enum import Enum,IntEnum # since Python 3.4
+
+class MsgLevel(IntEnum):
+	err = 1
+	warn = 2
+	info = 3
+	dbg = 4
 
 class Err_irsync(Exception):
 	def __init__(self, errmsg, errcode=-1):
@@ -203,7 +210,7 @@ class WatchdogTimer(Thread):
 			# allow the timer to be restarted while blocked
 			with self.blocked:
 				if self.deadline <= self.timer() and not self.cancelled.is_set():
-					print("calling back..........")
+					print("Killing back subprocess......") # debug
 					return self.callback(*self.args)  # on timeout
 
 	def restart(self):

@@ -31,12 +31,15 @@ def WriteIniItem(ini_filepath, section, itemname, itemval):
 	with open(ini_filepath, 'w') as inifile:
 		iniobj.write(inifile)
 
+def DHMS_to_Seconds(days, hours, minutes, seconds=0):
+	total_seconds = ((days * 24 + hours) * 60 + minutes) * 60 + seconds
+	return total_seconds
 
-def Seconds_to_DHM(seconds):
-	minutes = seconds//60
+def Seconds_to_DHMS(total_seconds):
+	minutes = total_seconds//60
 	hours = minutes//60
 	days = hours//24
-	return (days, hours%24, minutes%60)
+	return (days, hours%24, minutes%60, total_seconds%60)
 
 def RemoveDir_IfEmpty(dirpath):
 	dir_parent = os.path.dirname(dirpath)

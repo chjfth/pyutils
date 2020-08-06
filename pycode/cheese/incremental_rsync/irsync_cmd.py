@@ -7,8 +7,15 @@ D:\gitw\pyutils> python -m cheese.incremental_rsync.test
 
 import os, sys
 import argparse
+from .share import *
 from .client import *
 from .client import _check_rsync_url
+
+def non_negative_int(x):
+    i = int(x)
+    if i < 0:
+        raise argparse.ArgumentTypeError('Negative values are not allowed.')
+    return i
 
 def init_irsync_argparser():
 	ap = argparse.ArgumentParser(description="irsync, the incremental rsync wrapper.")
@@ -42,32 +49,47 @@ def init_irsync_argparser():
 	        'If you want a backup per minute, you can use YYYYMMDD-hhmm, where hh means hour, mm means minute.'
 	        '(note the difference of MM and mm)'
 	)
-	ap.add_argument('--old-days', type=int, dest='old_days', default=0,
+
+	ap.add_argument('--msg-level', type=str, dest='msg_level', choices=[e.name for e in list(MsgLevel)],
+		default='info',
+		help='Assigns log message level.'
+	)
+
+	ap.add_argument('--old-days', type=non_negative_int, dest='old_days', default=0,
 		help='(optional) Tells how many days to keep old backups. If it is 30, then backups older than 30 days '
 	         'will be automatically deleted. \n'
 	         'This defaults to 0, means no auto-delete.'
 	)
 	ap.add_argument('--old-hours', type=int, dest='old_hours', default=0,
-		help='Add extra hours to old days. This is mainly used for testing the auto-delete feature.'
+		help='Add extra hours to old days. This is mainly used for testing the auto-delete feature. \n'
+	        'There is --old-minutes as well.'
 	)
 	ap.add_argument('--old-minutes', type=int, dest='old_minutes', default=0,
-		help='Add extra minutes to old days and old hours. This is mainly used for testing.'
+		help=argparse.SUPPRESS
 	)
 
 	ap.add_argument('--max-retry', type=int, dest='max_retry', default=0,
 		help='Assign max retry count for calling rsync subprocess. '
 	        'Default is 0, meaning irsync will call rsync subprocess only once, no retry.'
 	)
-	ap.add_argument('--max-run-seconds', type=int, dest='max_run_seconds', default=0,
-		help='Assign max seconds to run for a whole irsync session.'
+	ap.add_argument('--max-run-hours', type=non_negative_int, dest='max_run_hours', default=0,
+		help='Assign max hours to run for a whole irsync session.'
 	        'Default value 0 means no time limit, and irsync will wait as long as rsync executes, '
 	        'and as many times as --max-retry is specified.'
 	)
+	ap.add_argument('--max-run-minutes', type=int, dest='max_run_minutes', default=0,
+		help='Add extra minutes to --max-run-hours, testing use. \n'
+	        'There is --max-run-seconds as well.'
+	)
+	ap.add_argument('--max-run-seconds', type=int, dest='max_run_seconds', default=0,
+		help=argparse.SUPPRESS
+	)
 
-	ap.add_argument('--rsync', type=str, dest='rsync_extra_params',
-		help='Supply extra rsync parameters. \n'
-		    ' This option MUST appear finally on the command line, and its full content MUST not be wrapped by any quotes.'
-	) # Note: This parameter is special, so I process it myself instead of passing it to argparse.
+#	ap.add_argument('--rsync', type=str, dest='rsync_extra_params',
+#		help='Supply extra rsync parameters. \n'
+#		    ' This option MUST appear finally on the command line, and its full content MUST not be wrapped by any quotes.'
+#	) # Note: This parameter is special, so I process it myself instead of passing it to argparse.
+	# todo: Use nargs=argparse.REMAINDER
 
 	return ap
 
@@ -99,16 +121,17 @@ def irsync_cmd():
 	# Second, use argparse API to parse remaining parameters
 	#
 
-	args = ap.parse_args(argv[1:])
+	apargs = ap.parse_args(argv[1:])
+	ret = irsync_fetch_once(apargs, rsync_extra_params)
 
-	ret = irsync_fetch_once(args.rsync_url, args.local_store_dir, args.shelf,
-		datetime_pattern=args.datetime_pattern,
-	    old_days=args.old_days,
-		old_hours=args.old_hours,
-		old_minutes=args.old_minutes,
-		max_retry=args.max_retry,
-		max_run_seconds=args.max_run_seconds,
-	    rsync_extra_params=rsync_extra_params)
+	# ret = irsync_fetch_once(args.rsync_url, args.local_store_dir, args.shelf,
+	# 	datetime_pattern=args.datetime_pattern,
+	#     old_days=args.old_days,
+	# 	old_hours=args.old_hours,
+	# 	old_minutes=args.old_minutes,
+	# 	max_retry=args.max_retry,
+	# 	max_run_seconds=args.max_run_seconds,
+	#     rsync_extra_params=rsync_extra_params)
 
 	pass
 
