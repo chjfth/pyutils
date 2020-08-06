@@ -52,11 +52,11 @@ def init_irsync_argparser():
 
 	ap.add_argument('--msg-level', type=str, dest='msg_level', choices=[e.name for e in list(MsgLevel)],
 		default='info',
-		help='Assigns log message level.'
+		help='Assigns log message level. Default is "%(default)s".'
 	)
 
 	ap.add_argument('--old-days', type=non_negative_int, dest='old_days', default=0,
-		help='(optional) Tells how many days to keep old backups. If it is 30, then backups older than 30 days '
+		help='Tells how many days to keep old backups. If it is 30, then backups older than 30 days '
 	         'will be automatically deleted. \n'
 	         'This defaults to 0, means no auto-delete.'
 	)
