@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-import os, sys
+import os, sys, time
 import shutil
 import configparser # ini operation
-from . import share
+# from .share import
 
 def ReadIniItem(ini_filepath, section, itemname):
 	iniobj = configparser.ConfigParser()
@@ -47,6 +47,8 @@ def RemoveDir_IfEmpty(dirpath):
 	if len(files)==0:
 		os.rmdir(dir_parent)
 
+def uesec_now():
+	return int(time.time())
 
 if __name__=='__main__':
 	inifp = 'irsync.ini'
@@ -54,4 +56,5 @@ if __name__=='__main__':
 	WriteIniItem(inifp, 'sect1', 'item1', 'value10')
 	WriteIniItem(inifp, 'sect1', 'item2', 'value20')
 	ret = ReadIniItem(inifp, 'sect1', 'item2')
-	pass
+
+

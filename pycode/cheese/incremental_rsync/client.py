@@ -117,7 +117,7 @@ class irsync_st:
 		# [local_store_dir]/[datetime_vault]/[server.local_shelf] becomes final target dir for rsync.
 		# [server.local_shelf] is called [ushelf] for brevity.
 
-		self.uesec_start = time.time()
+		self.uesec_start = uesec_now()
 
 		#
 		# Set some default working parameters.
@@ -134,10 +134,16 @@ class irsync_st:
 		#
 		# Process extra optional arguments
 		#
-		self._loglevel = MsgLevel[apargs.msg_level] # string -> enum value  # self._save_extra_args(args, 'loglevel', MsgLevel, '_loglevel')
-		self._old_seconds = DHMS_to_Seconds(apargs.old_days, apargs.old_hours, apargs.old_minutes) #self._save_extra_args(args, 'old_seconds', int, '_old_seconds', value_not_negative)
-		self._max_retry = apargs.max_retry # self._save_extra_args(args, 'max_retry', int, '_max_retry', value_not_negative)
-		self._max_run_seconds = DHMS_to_Seconds(0, apargs.max_run_hours, apargs.max_run_minutes, apargs.max_run_seconds) # self._save_extra_args(args, 'max_run_seconds', int, '_max_run_seconds', value_not_negative)
+		self._loglevel = MsgLevel[apargs.msg_level]
+		self._old_seconds = DHMS_to_Seconds(apargs.old_days, apargs.old_hours, apargs.old_minutes)
+		self._max_retry = apargs.max_retry
+		self._max_run_seconds = DHMS_to_Seconds(0, apargs.max_run_hours, apargs.max_run_minutes, apargs.max_run_seconds)
+		if self._max_run_seconds>1:
+			self.is_run_time_limit = True
+			self.uesec_limit = uesec_now()+self._max_run_seconds
+		else:
+			self.is_run_time_limit = False
+			self.uesec_limit = 0
 		#
 		self._rsync_extra_params = rsync_extra_params
 		check_rsync_params_conflict(rsync_extra_params)
@@ -504,13 +510,19 @@ class irsync_st:
 %s
 """ % (self.lastlog_datetime_str, shell_cmd, line_sep78))
 		#
-		exitcode = run_exe_log_output_and_print(rsync_argv, self._max_run_seconds, {"shell": False}, fh_rsync)
+		if self.is_run_time_limit and uesec_now()>self.uesec_limit:
+			self.err("""The rsync run fail, due to session time limit({} hours, {} minutes, {} seconds).""".format(
+				*Seconds_to_DHMS(self._max_run_seconds)[1:4]
+			))
+			raise Err_irsync("Irsync session fail, due to session time limit.")
+
+		exitcode = run_exe_log_output_and_print(rsync_argv, self.uesec_limit, {"shell": False}, fh_rsync)
 
 		if exitcode == 0:
-			self.info("Rsync run success.")
+			self.info("rsync run success.")
 		else:
 			# Use warn(instead of error) here, bcz I do not consider it the FINAL error.
-			self.warn("""Rsync run fail, exitcode=%d
+			self.warn("""rsync run fail, exitcode=%d
     To know detailed reason. Check rsync console message log at:
         %s""" % (exitcode, fp_rsync))
 
