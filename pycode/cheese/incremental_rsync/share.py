@@ -166,15 +166,17 @@ class WatchdogTimer(Thread):
 		self.blocked = Lock()
 
 	def run(self):
-		self.restart() # don't start timer until `.start()` is called // Thread.start()?
+		self.restart() # don't start timer until `Thread.start()`
 		# wait until timeout happens or the timer is canceled
-		while not self.cancelled.wait(self.deadline - self.timer()):
+		wait_sec = self.deadline - self.timer()
+		while not self.cancelled.wait(wait_sec):
 			# don't test the timeout while something else holds the lock
 			# allow the timer to be restarted while blocked
 			with self.blocked:
 				if self.deadline <= self.timer() and not self.cancelled.is_set():
 					# print("Killing back subprocess......") # debug
 					return self.callback(*self.args)  # on timeout
+		pass
 
 	def restart(self, new_timeout=0):
 		"""Restart the watchdog timer."""
@@ -221,7 +223,7 @@ def y_run_exe_log_output(cmd_args, uesec_limit, dict_Popen_args):
 			print('### timeout_sec=%d'%(timeout_sec))
 			# kill subproc in timeout seconds unless the timer is restarted
 			watchdog = WatchdogTimer(timeout_sec, callback=subproc.kill, daemon=True)
-			watchdog.start()
+			watchdog.start() # it is actually Thread.start()
 			for line in subproc.stdout:
 				yield line
 
@@ -258,3 +260,4 @@ if __name__=='__main__':
 	uesec_limit = uesec_now() + run_seconds
 
 	run_exe_log_output_and_print(sleep_print_cmd.split(), uesec_limit)
+	pass
