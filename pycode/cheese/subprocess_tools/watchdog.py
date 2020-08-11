@@ -224,5 +224,7 @@ python3 -m cheese.subprocess_tools.watchdog 2,4 "./sleep-print 990 990 990 990 9
 				print("###%s"%(linebytes.decode('utf8')), end='')
 				watchdog.feed_dog()
 
+	print("subproc.returncode=%d"%(subproc.returncode))
+
 #	run_exe_log_output_and_print(sleep_print_cmd.split(), uesec_limit)
 	pass
