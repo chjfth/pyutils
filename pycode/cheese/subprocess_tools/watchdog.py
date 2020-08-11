@@ -162,30 +162,38 @@ class WatchdogThread(Thread):
 
 
 @contextmanager
-def pipe_process_with_timeout(subproc, once_timeout_sec, total_timeout_sec, is_print_dbginfo=False):
-	"""This context manager put the openpipe operation under the monitoring of a auto-created watchdog thread.
-	If the context code fails to feed the dog every once_timeout_sec, or the total_timeout_sec elapsed,
-	subproc.kill() will be issued by the thread.
+def pipe_process_with_timeout(subproc, once_timeout_sec, max_run_seconds, is_print_dbginfo=False):
+	"""This context manager put the subproc operation under the monitoring of a auto-created watchdog thread.
+	If the context code(code in the with...block) fails to feed the dog every once_timeout_sec,
+	or max_run_seconds elapsed, subproc.kill() will be issued by the thread.
 
-	This is useful when you want to call the potentially block-forever subproc.stdout.readline(),
+	This is useful when you want to call the potentially forever-blocking subproc.stdout.readline(),
 	because the .kill() by the watchdog thread will render blocking pipe read to return.
 
 	To feed the dog, write code like below:
 
 	subproc = subprocess.Popen(...)
 	with pipe_process_with_timeout(subproc, ...) as watchdog:
-		text = subproc.stdout.readline()
-		# do sth with the text
-		watchdog.feed_dog()
+		for linebytes in subproc.stdout:
+			if not linebytes:
+				break
+			# do something with linebytes...
+			watchdog.feed_dog()
 
-	:param openpipe:
+	:param subproc:
+		The Popen object returned from subprocess.Popen() .
+
 	:param once_timeout_sec:
-	:param total_timeout_sec:
-	:return:
+		If feed_dog() has not been called these many seconds, the subproc will be killed by the watchdog thread.
+
+	:param max_run_seconds:
+		If the subproc has run for these many seconds, it will be killed.
+
+	:return: An implicit context-manager object.
 	"""
 
-	thread_name = 'WatchdogThread for pid=%d. (timeout=%d,%d)'%(subproc.pid, once_timeout_sec, total_timeout_sec)
-	dogthread = WatchdogThread(once_timeout_sec, total_timeout_sec, subproc.kill,
+	thread_name = 'WatchdogThread for pid=%d. (timeout=%d,%d)'%(subproc.pid, once_timeout_sec, max_run_seconds)
+	dogthread = WatchdogThread(once_timeout_sec, max_run_seconds, subproc.kill,
 							is_print_dbginfo=is_print_dbginfo,
 	                        name=thread_name)
 	dogthread.start()
@@ -210,11 +218,10 @@ python3 -m cheese.subprocess_tools.watchdog 2,4 "./sleep-print 990 990 990 990 9
 	with subprocess.Popen(sleep_print_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as subproc:
 
 		with pipe_process_with_timeout(subproc, once_secs, total_secs, is_print_dbginfo=True) as watchdog:
-			while True:
-				line = subproc.stdout.readline()
-				if not line:
+			for linebytes in subproc.stdout:
+				if not linebytes:
 					break
-				print("###%s"%(line.decode('utf8')), end='')
+				print("###%s"%(linebytes.decode('utf8')), end='')
 				watchdog.feed_dog()
 
 #	run_exe_log_output_and_print(sleep_print_cmd.split(), uesec_limit)
