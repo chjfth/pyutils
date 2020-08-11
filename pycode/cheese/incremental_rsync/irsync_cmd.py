@@ -68,22 +68,31 @@ def init_irsync_argparser():
 		help=argparse.SUPPRESS
 	)
 
+	ap.add_argument('--max-rsync-hours', type=non_negative_int, dest='max_rsync_hours', default=0,
+		help='Assign max hours to run for one rsync subprocess execution.'
+	        'Default value 0 means no time limit, and irsync will wait as long as rsync executes, '
+	        'and as many times as --max-retry is specified.'
+	)
+	ap.add_argument('--max-rsync-minutes', type=int, dest='max_rsync_minutes', default=0,
+		help='Add extra minutes to --max-rsync-hours, testing use. \n'
+	        'There is --max-rsync-seconds as well.'
+	)
+	ap.add_argument('--max-rsync-seconds', type=int, dest='max_rsync_seconds', default=0,
+		help=argparse.SUPPRESS
+	)
+
 	ap.add_argument('--max-retry', type=int, dest='max_retry', default=0,
 		help='Assign max retry count for calling rsync subprocess. '
 	        'Default is 0, meaning irsync will call rsync subprocess only once, no retry.'
 	)
-	ap.add_argument('--max-run-hours', type=non_negative_int, dest='max_run_hours', default=0,
-		help='Assign max hours to run for a whole irsync session.'
-	        'Default value 0 means no time limit, and irsync will wait as long as rsync executes, '
-	        'and as many times as --max-retry is specified.'
+
+	ap.add_argument('--max-irsync-hours', type=non_negative_int, dest='max_irsync_hours', default=0,
+		help='Assign max hours to run for a whole irsync session.\n'
+	        'There is --max-irsync-minutes and --max-irsync-seconds for test purpose.'
 	)
-	ap.add_argument('--max-run-minutes', type=int, dest='max_run_minutes', default=0,
-		help='Add extra minutes to --max-run-hours, testing use. \n'
-	        'There is --max-run-seconds as well.'
-	)
-	ap.add_argument('--max-run-seconds', type=int, dest='max_run_seconds', default=0,
-		help=argparse.SUPPRESS
-	)
+	ap.add_argument('--max-irsync-minutes', type=int, dest='max_irsync_minutes', default=0, help=argparse.SUPPRESS)
+	ap.add_argument('--max-irsync-seconds', type=int, dest='max_irsync_seconds', default=0, help=argparse.SUPPRESS)
+
 
 #	ap.add_argument('--rsync', type=str, dest='rsync_extra_params',
 #		help='Supply extra rsync parameters. \n'

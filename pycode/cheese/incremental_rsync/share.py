@@ -9,6 +9,7 @@ import datetime
 import glob
 from enum import Enum,IntEnum # since Python 3.4
 from .helper import *
+from cheese.subprocess_tools import pipe_process_with_timeout
 
 class MsgLevel(IntEnum):
 	err = 1
@@ -200,50 +201,24 @@ class Generator:
     def __iter__(self):
         self.retvalue = yield from self.gen
 
-def y_run_exe_log_output(cmd_args, uesec_limit, dict_Popen_args):
-
-	# uesec_limit: The Unix epoch seconds before the subprocess should finish or be killed.
-	# If 0, then no limit.
+def y_run_exe_log_output(cmd_args, max_run_secs=0, dict_Popen_args={}):
 
 	with subprocess.Popen(cmd_args,
 			stdout=subprocess.PIPE, stderr=subprocess.STDOUT, # these two are important
 	 		**dict_Popen_args) as subproc:
 
-		if uesec_limit==0:
-			while True:
-				line = subproc.stdout.readline()
-				if not line:  # this means child-process has ended.
-					break
-				yield line
+		with pipe_process_with_timeout(subproc, 0, max_run_secs) as watchdog:
+			for linebytes in subproc.stdout:
+				if not linebytes:
+					break # sub-process has ended
+				yield linebytes #print("###%s" % (linebytes.decode('utf8')), end='')
+				watchdog.feed_dog()
 
-		else: # need readline() timeout
-			# Thanks to: https://stackoverflow.com/a/34115590/151453
-
-			timeout_sec = uesec_limit - int(time.time())
-			print('### timeout_sec=%d'%(timeout_sec))
-			# kill subproc in timeout seconds unless the timer is restarted
-			watchdog = WatchdogTimer(timeout_sec, callback=subproc.kill, daemon=True)
-			watchdog.start() # it is actually Thread.start()
-			for line in subproc.stdout:
-				yield line
-
-				timeout_sec = uesec_limit - int(time.time())
-
-				# Note: won't invoke the watchdog callback if do_something() takes too long
-				with watchdog.blocked:
-					if timeout_sec<=0:  # not do_something(line):  # some criterion is not satisfied
-						# print("y_run_exe_log_output: calling subproc.kill()") # debug
-						subproc.kill()
-						break
-					watchdog.restart(timeout_sec)  # restart timer just before reading the next line
-			watchdog.cancel()
-
-	subproc.wait() # we know that child-process should have exited.
 	return subproc.returncode # return child-process exit-code
 
-def run_exe_log_output_and_print(cmd_args, uesec_limit, dict_Popen_args={}, logfile_handle=None):
+def run_exe_log_output_and_print(cmd_args, max_run_secs, dict_Popen_args={}, logfile_handle=None):
 	
-	gen_childoutput = Generator(y_run_exe_log_output(cmd_args, uesec_limit, dict_Popen_args))
+	gen_childoutput = Generator(y_run_exe_log_output(cmd_args, max_run_secs, dict_Popen_args))
 	for line in gen_childoutput:
 		textline = line.decode("utf8")
 		if logfile_handle:
@@ -254,10 +229,4 @@ def run_exe_log_output_and_print(cmd_args, uesec_limit, dict_Popen_args={}, logf
 
 
 if __name__=='__main__':
-	run_seconds = int(sys.argv[1])
-	sleep_print_cmd = sys.argv[2]
-	print("Will run %d seconds"%(run_seconds))
-	uesec_limit = uesec_now() + run_seconds
-
-	run_exe_log_output_and_print(sleep_print_cmd.split(), uesec_limit)
 	pass

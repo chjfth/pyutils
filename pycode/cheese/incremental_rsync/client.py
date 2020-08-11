@@ -137,12 +137,13 @@ class irsync_st:
 		self._loglevel = MsgLevel[apargs.msg_level]
 		self._old_seconds = DHMS_to_Seconds(apargs.old_days, apargs.old_hours, apargs.old_minutes)
 		self._max_retry = apargs.max_retry
-		self._max_run_seconds = DHMS_to_Seconds(0, apargs.max_run_hours, apargs.max_run_minutes, apargs.max_run_seconds)
-		if self._max_run_seconds>1:
-			self.is_run_time_limit = True
-			self.uesec_limit = uesec_now()+self._max_run_seconds
+		self._max_rsync_seconds = DHMS_to_Seconds(0, apargs.max_rsync_hours, apargs.max_rsync_minutes, apargs.max_rsync_seconds)
+		self._max_irsync_seconds = DHMS_to_Seconds(0, apargs.max_irsync_hours, apargs.max_irsync_minutes, apargs.max_irsync_seconds)
+		if self._max_irsync_seconds>0:
+			#self.is_run_time_limit = True
+			self.uesec_limit = uesec_now()+self._max_irsync_seconds
 		else:
-			self.is_run_time_limit = False
+			#self.is_run_time_limit = False
 			self.uesec_limit = 0
 		#
 		self._rsync_extra_params = rsync_extra_params
@@ -463,6 +464,17 @@ class irsync_st:
 
 	def call_rsync_subprocess_once(self, last_succ_dirpath):
 
+		now = uesec_now()
+		if self.uesec_limit>0 and now>=self.uesec_limit:
+			self.err("""The rsync subprocess will not run, due to irsync session time limit({} hours, {} minutes, {} seconds).""".format(
+				*Seconds_to_DHMS(self._max_irsync_seconds)[1:4]
+			))
+			raise Err_irsync("Irsync session fail, due to session time limit.")
+
+		rsync_run_secs = self._max_rsync_seconds
+		if self.uesec_limit>0:
+			rsync_run_secs = min(self._max_rsync_seconds, self.uesec_limit-now)
+
 		line_sep78 = '=' * 78
 		#
 		# Prepare rsync subprocess parameters...
@@ -497,11 +509,13 @@ class irsync_st:
     The corresponding shell command line is (for your manual debugging):
 	    %s
     With log file: %s (in same directory as this one)
+    This rsync run-time limit: %s
 %s
 """ % (
 			'\n'.join(argv_hint_lines),
 			shell_cmd,
 			os.path.basename(fp_rsync),
+			Seconds_to_HMS_string(rsync_run_secs),
 			line_sep78))
 		#
 		# Add some banner text at start of fp_rsync.
@@ -510,13 +524,7 @@ class irsync_st:
 %s
 """ % (self.lastlog_datetime_str, shell_cmd, line_sep78))
 		#
-		if self.is_run_time_limit and uesec_now()>self.uesec_limit:
-			self.err("""The rsync run fail, due to session time limit({} hours, {} minutes, {} seconds).""".format(
-				*Seconds_to_DHMS(self._max_run_seconds)[1:4]
-			))
-			raise Err_irsync("Irsync session fail, due to session time limit.")
-
-		exitcode = run_exe_log_output_and_print(rsync_argv, self.uesec_limit, {"shell": False}, fh_rsync)
+		exitcode = run_exe_log_output_and_print(rsync_argv, rsync_run_secs, {"shell": False}, fh_rsync)
 
 		if exitcode == 0:
 			self.info("rsync run success.")

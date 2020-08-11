@@ -41,6 +41,10 @@ def Seconds_to_DHMS(total_seconds):
 	days = hours//24
 	return (days, hours%24, minutes%60, total_seconds%60)
 
+def Seconds_to_HMS_string(total_seconds):
+	days, hours, mins, secs = Seconds_to_DHMS(total_seconds)
+	return "{} hours, {} minutes, {} seconds".format(days*24+hours, mins, secs)
+
 def RemoveDir_IfEmpty(dirpath):
 	dir_parent = os.path.dirname(dirpath)
 	files = os.listdir(dir_parent)
