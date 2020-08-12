@@ -72,7 +72,10 @@ class WatchdogThread(Thread):
 		#
 		self._timeout_action = timeout_action
 		self._action_args = action_args
-
+		#
+		self.uesec_timeout_action = 0 # if timeout action is taken, this timestamp is updated.
+		self.uesec_work_done = 0 # set on work-done event detected by thread code
+		#
 		self._is_print_dbginfo = is_print_dbginfo
 		pass
 
@@ -148,12 +151,14 @@ class WatchdogThread(Thread):
 					if self._is_print_dbginfo:
 						print("WatchdogThread._timeout_action() calling...")
 
+					self.uesec_timeout_action = time.time() # current uesec
 					ret = self._timeout_action(*self._action_args)
 					return ret
 
 			# Now we wait.
 			is_work_done = self._evt_done.wait(wait_secs)
 			if is_work_done:
+				self.uesec_work_done = time.time()
 				return None
 
 			# Go back to start of while-cycle to check whether we have further seconds to wait.

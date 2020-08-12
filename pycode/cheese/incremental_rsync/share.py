@@ -4,6 +4,7 @@
 # print("[%s] __name__=%s"%(__file__,__name__))
 
 import os, sys, time, subprocess
+import math
 import re
 import datetime
 import glob
@@ -35,7 +36,24 @@ class err_FileExists(Exception): # internal use
 		self.errfilepath = errfilepath
 
 
-def datetime_now_str():
+def datetime_str_by_uesec(uesec, msec=False, compact=False):
+	tmlocal = time.localtime(uesec)
+	if compact:
+		timestr = time.strftime('%Y%m%d.%H%M%S', tmlocal)
+	else:
+		timestr = time.strftime('%Y-%m-%d_%H:%M:%S', tmlocal)
+
+	if msec==True: # need milliseconds part
+		msec_part = int( (uesec - math.floor(uesec))*1000%1000 )
+		timestr += ".%03d"%(msec_part)
+
+	return timestr
+
+def datetime_str_now(msec=False, compact=False):
+	uesec = time.time()
+	return datetime_str_by_uesec(uesec, msec, compact)
+
+def datetime_str_now___set_aside():
 	now = datetime.datetime.now()
 	timestr = "%04d%02d%02d.%02d%02d%02d.%03d"%(now.year, now.month, now.day, 
 		now.hour, now.minute, now.second, now.microsecond/1000)
@@ -148,49 +166,6 @@ def create_logfile_with_seq(filepath_pattern):
 	raise Err_irsync(text)
 
 
-# Thanks to: https://stackoverflow.com/a/34115590/151453
-# A portable solution is to use a thread to kill the child process if reading a line takes too long.
-#
-from threading import Event, Lock, Thread
-from time import monotonic  # use time.time or monotonic.monotonic on Python 2
-#
-class WatchdogTimer(Thread):
-	"""Run *callback* in *timeout* seconds unless the timer is restarted."""
-
-	def __init__(self, timeout, callback, *args, timer=monotonic, **kwargs):
-		super().__init__(**kwargs)
-		self.timeout = timeout
-		self.callback = callback
-		self.args = args
-		self.timer = timer
-		self.cancelled = Event()
-		self.blocked = Lock()
-
-	def run(self):
-		self.restart() # don't start timer until `Thread.start()`
-		# wait until timeout happens or the timer is canceled
-		wait_sec = self.deadline - self.timer()
-		while not self.cancelled.wait(wait_sec):
-			# don't test the timeout while something else holds the lock
-			# allow the timer to be restarted while blocked
-			with self.blocked:
-				if self.deadline <= self.timer() and not self.cancelled.is_set():
-					# print("Killing back subprocess......") # debug
-					return self.callback(*self.args)  # on timeout
-		pass
-
-	def restart(self, new_timeout=0):
-		"""Restart the watchdog timer."""
-		if new_timeout>0:
-			# print("### new_timeout=%d"%(new_timeout)) # debug
-			self.timeout = new_timeout
-
-		self.deadline = self.timer() + self.timeout
-
-	def cancel(self):
-		self.cancelled.set()
-
-
 class Generator:
 	# a clever helper class: https://stackoverflow.com/a/34073559/151453
 	# to make generator object explicit to caller code, so that caller code
@@ -199,9 +174,10 @@ class Generator:
         self.gen = gen
 
     def __iter__(self):
+	    # self.retvalue is the generator function's "true" return value
         self.retvalue = yield from self.gen
 
-def y_run_exe_log_output(cmd_args, max_run_secs=0, dict_Popen_args={}):
+def y_run_exe_with_time_limit(cmd_args, max_run_secs=0, dict_Popen_args={}):
 
 	with subprocess.Popen(cmd_args,
 			stdout=subprocess.PIPE, stderr=subprocess.STDOUT, # these two are important
@@ -214,19 +190,19 @@ def y_run_exe_log_output(cmd_args, max_run_secs=0, dict_Popen_args={}):
 				yield linebytes #print("###%s" % (linebytes.decode('utf8')), end='')
 				watchdog.feed_dog()
 
-	return subproc.returncode # return child-process exit-code
+	return (subproc.returncode, watchdog.uesec_timeout_action) # return a tuple: subprocess exitcode and force-kill uesec
 
 def run_exe_log_output_and_print(cmd_args, max_run_secs, dict_Popen_args={}, logfile_handle=None):
 	
-	gen_childoutput = Generator(y_run_exe_log_output(cmd_args, max_run_secs, dict_Popen_args))
+	gen_childoutput = Generator(y_run_exe_with_time_limit(cmd_args, max_run_secs, dict_Popen_args))
 	for line in gen_childoutput:
 		textline = line.decode("utf8")
 		if logfile_handle:
 			logfile_handle.write(textline)
 		print(textline, end='')
 
-	return gen_childoutput.retvalue # return child-process exit-code
-
+	(child_exitcode, kill_at_uesec) = gen_childoutput.retvalue
+	return (child_exitcode, kill_at_uesec)
 
 if __name__=='__main__':
 	pass

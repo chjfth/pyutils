@@ -277,7 +277,7 @@ class irsync_st:
 
 	def prn(self, msglevel, msg):
 
-		self.lastlog_datetime_str = datetime_now_str()
+		self.lastlog_datetime_str = datetime_str_now(msec=True, compact=True)
 
 		if self.loglevel.value < msglevel.value:
 			return
@@ -304,7 +304,7 @@ class irsync_st:
 		self.prn(MsgLevel.dbg, msg)
 
 	def prn_masterlog(self, msg):
-		msgline = "[%s]%s\n" % (datetime_now_str(), msg)
+		msgline = "[%s]%s\n" % (datetime_str_now(msec=True, compact=True), msg)
 
 		self.master_logfh.write(msgline)
 		self.master_logfh.flush()
@@ -524,12 +524,20 @@ class irsync_st:
 %s
 """ % (self.lastlog_datetime_str, shell_cmd, line_sep78))
 		#
-		exitcode = run_exe_log_output_and_print(rsync_argv, rsync_run_secs, {"shell": False}, fh_rsync)
+		(exitcode, kill_at_uesec) = run_exe_log_output_and_print(
+			rsync_argv, rsync_run_secs, {"shell": False}, fh_rsync)
 
 		if exitcode == 0:
 			self.info("rsync run success.")
 		else:
+			if kill_at_uesec > 0:
+				kill_msg = "rsync max run-time limit exceeded. Kill signal has been issued at %s ." % (
+					datetime_str_by_uesec(kill_at_uesec)
+				)
+				self.warn(kill_msg)
+
 			# Use warn(instead of error) here, bcz I do not consider it the FINAL error.
+			#
 			self.warn("""rsync run fail, exitcode=%d
     To know detailed reason. Check rsync console message log at:
         %s""" % (exitcode, fp_rsync))
