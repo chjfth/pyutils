@@ -93,12 +93,20 @@ def init_irsync_argparser():
 	ap.add_argument('--max-irsync-minutes', type=int, dest='max_irsync_minutes', default=0, help=argparse.SUPPRESS)
 	ap.add_argument('--max-irsync-seconds', type=int, dest='max_irsync_seconds', default=0, help=argparse.SUPPRESS)
 
-
-#	ap.add_argument('--rsync', type=str, dest='rsync_extra_params',
+#	ap.add_argument('--rsync', type=str, dest='rsync_extra_params', nargs=argparse.REMAINDER,
 #		help='Supply extra rsync parameters. \n'
 #		    ' This option MUST appear finally on the command line, and its full content MUST not be wrapped by any quotes.'
-#	) # Note: This parameter is special, so I process it myself instead of passing it to argparse.
-	# todo: Use nargs=argparse.REMAINDER
+#	)
+	# -- [2020-08-12] Note: (python 3.7) nargs=argparse.REMAINDER works well, but I do not use it,
+	# just bcz print_usage() is a bit buggy with it. The print_usage() hint does NOT list [--rsync ...] at tail, sigh.
+	# ... instead:
+	ap.add_argument('--rsync', action="store_true", # a tweak
+	    help='Use [--rsync ... ] to pass any parameters verbatim to rsync subprocess, no extra quotation marks required.\n'
+	        'IMPORTANT: You have to place these parameters at very tail of your whole command line so that '
+	        'I can clearly tell them apart from irsync\'s own parameters.'
+	)
+	# This tells argparse to display help for --rsync for us, but I will process --rsync ... myself.
+	# So using action="store_true" is enough.
 
 	return ap
 
