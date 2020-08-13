@@ -356,18 +356,33 @@ class irsync_st:
 			Seconds_to_DHMS(sec_keep)[0:3]
 		))
 
+		# Special: For dirpaths recorded in [last_success_dirpath], I will not remove them even if "outdated",
+		# bcz they are precious for later incremental backups.
+		#
+		last_success_dirpaths = IniEnumSectionItems(self.ini_filepath, INISEC_last_success_dirpath)
+
 		delete_count = 0
 		uesec_new = int(time.time())
 		for uesec_old, dirpath_old in self.y_find_existing_ushelf():
 			sec_stale = uesec_new - uesec_old
 			if sec_stale > sec_keep:
 				str_DHM = "{} days, {} hours, {} minutes".format(*Seconds_to_DHMS(sec_stale)[0:3])
-				self.prn_masterlog("""Removing old backup at: (created %s ago (%d seconds stale))
-    %s"""%(str_DHM, sec_stale, dirpath_old))
-				shutil.rmtree(dirpath_old)
-				delete_count +=1
-				RemoveDir_IfEmpty(dirpath_old)
 
+				if dirpath_old in last_success_dirpaths:
+					self.prn_masterlog("""Seeing old backup at: (created %s ago (%d seconds stale))
+	%s
+--but do not remove it because it is recorded in %s as last-success (precious for later incremental backup)."""%(
+						str_DHM, sec_stale,
+						dirpath_old,
+						ININAM_irsync_master
+					))
+				else:
+					self.prn_masterlog("""Removing old backup at: (created %s ago (%d seconds stale))
+    %s"""%(str_DHM, sec_stale, dirpath_old))
+
+					shutil.rmtree(dirpath_old)
+					delete_count +=1
+					RemoveDir_IfEmpty(dirpath_old)
 
 		if delete_count==0:
 			self.prn_masterlog("No backups are stale, leaving them alone this time.")

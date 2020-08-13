@@ -31,6 +31,18 @@ def WriteIniItem(ini_filepath, section, itemname, itemval):
 	with open(ini_filepath, 'w') as inifile:
 		iniobj.write(inifile)
 
+def IniEnumSectionItems(ini_filepath, section_name):
+	iniobj = configparser.ConfigParser()
+	iniobj.read(ini_filepath) # no matter if file not exist
+
+	try:
+		section = iniobj[section_name]
+		itemnames = list(section)
+		itemvals = [section[it] for it in itemnames]
+		return itemvals
+	except KeyError:
+		return []
+
 def DHMS_to_Seconds(days, hours, minutes, seconds=0):
 	total_seconds = ((days * 24 + hours) * 60 + minutes) * 60 + seconds
 	return total_seconds
