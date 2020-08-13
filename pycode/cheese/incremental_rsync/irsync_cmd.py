@@ -93,6 +93,17 @@ def init_irsync_argparser():
 	ap.add_argument('--max-irsync-minutes', type=int, dest='max_irsync_minutes', default=0, help=argparse.SUPPRESS)
 	ap.add_argument('--max-irsync-seconds', type=int, dest='max_irsync_seconds', default=0, help=argparse.SUPPRESS)
 
+	ap.add_argument('--fetch-finish-dir-from', type=str, dest='finish_dir_filename',
+	    help='This assign a filename. If backup success, the final backup directory(full-path) '
+	        'will be written to this filename, so the caller can know it and do some post actions. '
+	        'But if the backup fails, the original content of this filename will not be touched. '
+	        'Sure, it can be a bare filename, or a filename with absolute/relative path prefix.'
+	)
+	ap.add_argument('--finish-dir-relative', action="store_true", dest='finish_dir_relative',
+		help='Use with --fetch-finish-dir-from=<filename>. If present, the dirpath written to <filename> '
+	        'will be a relative path to current working directory, if possible.'
+	)
+
 #	ap.add_argument('--rsync', type=str, dest='rsync_extra_params', nargs=argparse.REMAINDER,
 #		help='Supply extra rsync parameters. \n'
 #		    ' This option MUST appear finally on the command line, and its full content MUST not be wrapped by any quotes.'

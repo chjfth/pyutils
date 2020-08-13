@@ -146,6 +146,9 @@ class irsync_st:
 			#self.is_run_time_limit = False
 			self.uesec_limit = 0
 		#
+		self._finish_dir_filename = apargs.finish_dir_filename
+		self._finish_dir_relative = apargs.finish_dir_relative
+		#
 		self._rsync_extra_params = rsync_extra_params
 		check_rsync_params_conflict(rsync_extra_params)
 
@@ -370,7 +373,7 @@ class irsync_st:
 
 				if dirpath_old in last_success_dirpaths:
 					self.prn_masterlog("""Seeing old backup at: (created %s ago (%d seconds stale))
-	%s
+    %s
 --but do not remove it because it is recorded in %s as last-success (precious for later incremental backup)."""%(
 						str_DHM, sec_stale,
 						dirpath_old,
@@ -474,8 +477,7 @@ class irsync_st:
 		except OSError:
 			raise Err_irsync('Error: Cannot record [%s] information into file "%s"'%(
 				INISEC_last_success_dirpath, self.ini_filepath))
-
-		self.master_logfile_end(True)
+		return
 
 	def call_rsync_subprocess_once(self, last_succ_dirpath):
 
@@ -565,6 +567,27 @@ class irsync_st:
 		#
 		fh_rsync.close()
 
+	def success_cleanup(self):
+		if self._finish_dir_filename:
+			hint_fp = os.path.abspath(self._finish_dir_filename)
+			hint_text = self.finish_dirpath
+			if self._finish_dir_relative:
+				hint_text = hint_text.replace(os.getcwd()+os.sep, '', 1) # strip cwd prefix
+
+			succ = True
+			try:
+				open(hint_fp, "w").write(hint_text)
+			except:
+				succ = False
+
+			self.prn_masterlog("""Write finish directory to file:
+    %s
+-- %s """%(
+				hint_fp,
+				"Success." if succ else "Fail!"
+            ))
+		self.master_logfile_end(True)
+		return
 
 def _check_rsync_url(url):
 	# url should be rsync://<server>/<srcmodule>
@@ -584,6 +607,7 @@ def irsync_fetch_once(apargs, rsync_extra_params):
 	irs = irsync_st(apargs, rsync_extra_params)
 	try:
 		irs.run_irsync_session_once()
+		irs.success_cleanup()
 	except:
 		exc_string = traceback.format_exc()
 		irs.log_finalize_due_to_exception(exc_string)
