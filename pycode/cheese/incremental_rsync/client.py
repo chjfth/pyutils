@@ -250,7 +250,8 @@ class irsync_st:
 		runtime = "(Run-time: %d seconds =%dh,%dm,%ss)"%(run_seconds, *Seconds_to_DHMS(run_seconds)[1:4])
 
 		if is_succ:
-			self.prn_masterlog("""Irsync session success. 
+			if hasattr(self, 'sess_logfile'): # implies validity of .sess_logfile_success
+				self.prn_masterlog("""Irsync session success. 
     Get your backup at:
         %s
     Session log file  :
