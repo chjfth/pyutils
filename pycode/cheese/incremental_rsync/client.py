@@ -7,6 +7,7 @@ import os, sys, re
 import time, datetime
 import shutil, shlex
 import traceback
+from pathlib import Path
 from enum import Enum,IntEnum # since Python 3.4
 from collections import namedtuple
 
@@ -109,6 +110,14 @@ class irsync_st:
 	def sess_done_ini_filepath(self):
 		return os.path.join(self.working_dirpath, ININAM_sess_done)
 
+	@property
+	def finish_dirpath_rela(self):
+		return str( Path(self.finish_dirpath).relative_to(self.local_store_dir) )
+
+	def abspath(self, rela_path):
+		"""Prefix local_store_dir to rela_path so to make an absolute dir."""
+		return os.path.join(self.local_store_dir, rela_path)
+
 	#def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 	def __init__(self, apargs, rsync_extra_params):
 
@@ -195,8 +204,9 @@ class irsync_st:
 
 		try:
 			os.makedirs(self.local_store_dir, exist_ok=True)
+			os.chdir(self.local_store_dir)
 		except OSError:
-			raise Err_irsync('Error: Cannot create local_store_dir "%s"'%(self.local_store_dir))
+			raise Err_irsync('Error: Cannot create/enter local_store_dir "%s"'%(self.local_store_dir))
 
 		self.master_logfile_start()
 		return
@@ -473,7 +483,7 @@ class irsync_st:
 		# Record [last_success_dirpath] into rsync.ini
 		try:
 			WriteIniItem(self.ini_filepath, INISEC_last_success_dirpath,
-		             self.ushelf_name, self.finish_dirpath)
+		             self.ushelf_name, self.finish_dirpath_rela)
 		except OSError:
 			raise Err_irsync('Error: Cannot record [%s] information into file "%s"'%(
 				INISEC_last_success_dirpath, self.ini_filepath))
@@ -500,8 +510,9 @@ class irsync_st:
 		rsync_argv = ["rsync", "-av"]
 
 		if last_succ_dirpath:
-			# no need to surround the path with quotes, even if it contains spaces
-			rsync_argv.append('--link-dest=%s' % (last_succ_dirpath))
+			# No need to surround the path with quotes, even if it contains spaces, bcz we will use shell=False.
+			# And we must pass abspath to --link-dest= bcz relative path means differently to rsync.
+			rsync_argv.append('--link-dest=%s' % (self.abspath(last_succ_dirpath)))
 
 		if self._rsync_extra_params:
 			rsync_argv.extend(self._rsync_extra_params)
@@ -572,7 +583,7 @@ class irsync_st:
 			hint_fp = os.path.abspath(self._finish_dir_filename)
 			hint_text = self.finish_dirpath
 			if self._finish_dir_relative:
-				hint_text = hint_text.replace(os.getcwd()+os.sep, '', 1) # strip cwd prefix
+				hint_text = self.finish_dirpath_rela
 
 			succ = True
 			try:
