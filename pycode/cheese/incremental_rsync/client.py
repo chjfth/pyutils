@@ -263,16 +263,26 @@ class irsync_st:
 		self.master_filelock.unlock()
 		self.master_logfh.close()
 
-	def log_finalize_due_to_exception(self, excpt_text):
-		self.prn_masterlog(excpt_text)
+	def log_finalize_due_to_exception(self):
+		exctype, excvalue, _ = sys.exc_info()
 
-		self.prn_masterlog("""Irsync session stopped due to exception above! 
+		re_raise = True
+		if issubclass(exctype, Err_irsync):
+			# For our explict Err_irsync class, comprehensive error info should have been printed,
+			# so no need to dump the mystic Python call-stack in whole.
+			re_raise = False
+		else:
+			excpt_text = traceback.format_exc()
+			self.prn_masterlog(excpt_text)
+
+		self.prn_masterlog("""Irsync session stopped due to error/exception above! 
     Check session logfile at:
         %s
     Partial backup may be found at:
         %s""" % (self.sess_logfile, self.working_dirpath))
 
 		self.master_logfile_end(False)
+		return re_raise
 
 	@property
 	def loglevel(self):
@@ -620,9 +630,9 @@ def irsync_fetch_once(apargs, rsync_extra_params):
 		irs.run_irsync_session_once()
 		irs.success_cleanup()
 	except:
-		exc_string = traceback.format_exc()
-		irs.log_finalize_due_to_exception(exc_string)
-		raise
+		re_raise = irs.log_finalize_due_to_exception()
+		if re_raise:
+			raise
 
 	return True
 	
