@@ -150,7 +150,7 @@ def irsync_cmd():
 	#
 
 	apargs = ap.parse_args(argv[1:])
-	ret = irsync_fetch_once(apargs, rsync_extra_params)
+	succ = irsync_fetch_once(apargs, rsync_extra_params)
 
 	# ret = irsync_fetch_once(args.rsync_url, args.local_store_dir, args.shelf,
 	# 	datetime_pattern=args.datetime_pattern,
@@ -161,11 +161,11 @@ def irsync_cmd():
 	# 	max_run_seconds=args.max_run_seconds,
 	#     rsync_extra_params=rsync_extra_params)
 
-	pass
+	return succ
 
 if __name__ == '__main__':
 
 #	aptest()
-	ret = irsync_cmd()
-	exit(ret)
+	succ = irsync_cmd()
 
+	exit(0 if succ else 4)

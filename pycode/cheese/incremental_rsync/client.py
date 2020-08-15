@@ -172,7 +172,7 @@ class irsync_st:
 		server_goodchars = server.replace(':', '~') # ":" is not valid Windows filename, so change it to ~
 
 		if not local_shelf:
-			local_shelf = spath.split("/")[-1] # final word of spath
+			local_shelf = spath.rstrip("/").split("/")[-1] # final word of spath
 
 		# TODO: ensure no / in shelf name
 
@@ -611,22 +611,46 @@ class irsync_st:
 		self.master_logfile_end(True)
 		return
 
-def _check_rsync_url(url):
-	# url should be rsync://<server>/<srcmodule>
-	m = re.match("rsync://([^/]+)/(.+)", url)
-	if not m:
-		raise Err_irsync("Wrong rsync url format: %s"%(url))
-	
-	# return (server-name, server-path)
-	return m.group(1), m.group(2)
+def _check_rsync_url(rsync_src):
+	"""Check rsync url format validity.
 
+	Two forms are valid:
+	1.
+		rsync://<server>/<srcmodule>
+		rsync://<server>/<srcmodule>/dirname
+		rsync://<server>/<srcmodule>/dirname/
+	2.
+		/home/userfoo/myrepo
+		/home/userfoo/myrepo
+
+	Whether the url should end with a slash is solely the user's preference, and the trailing slash
+	is passed to rsync exe without modification.
+	You know, rsync will behave slightly differently with or without the trailing slash.
+	"""
+
+	if rsync_src.strip('/')=='':
+		raise Err_irsync("Error: rsync url cannot be a single / .")
+
+	m1 = re.match("rsync://([^/]+)/(.+)", rsync_src)
+	m2 = os.path.isabs(rsync_src)
+	if m1:
+		# return (server-name, server-path)
+		return m1.group(1), '/'+m1.group(2)
+	elif m2:
+		return 'LOCALHOST', rsync_src
+	else:
+		raise Err_irsync("Error: Wrong rsync url format: %s" % (rsync_src))
+	
 
 
 def irsync_fetch_once(apargs, rsync_extra_params):
-	
-	_check_rsync_url(apargs.rsync_url)
-	
-	irs = irsync_st(apargs, rsync_extra_params)
+
+	try:
+		irs = irsync_st(apargs, rsync_extra_params)
+	except Err_irsync as e:
+		print(e.errmsg)
+		return False
+
 	try:
 		irs.run_irsync_session_once()
 		irs.success_cleanup()
@@ -634,6 +658,8 @@ def irsync_fetch_once(apargs, rsync_extra_params):
 		re_raise = irs.log_finalize_due_to_exception()
 		if re_raise:
 			raise
+		else:
+			return False
 
 	return True
 	
