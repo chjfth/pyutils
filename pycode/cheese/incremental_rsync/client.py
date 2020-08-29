@@ -598,7 +598,7 @@ class irsync_st:
 				)
 				self.warn(kill_msg)
 
-			# Use .err(instead of .err_raise) here, bcz I do not consider it the FINAL error.
+			# Use .err(instead of .err_raise) here, bcz I do not consider it FINAL error.
 			#
 			self.err("""rsync run fail, exitcode=%d
     To know detailed reason. Check rsync console message log at:
