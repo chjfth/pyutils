@@ -286,6 +286,16 @@ class irsync_st:
 		return re_raise
 
 	@property
+	def prev_uesec_flushlog(self):
+		if not hasattr(self, '_prev_uesec_flushlog'):
+			self._prev_uesec_flushlog = 0
+		return self._prev_uesec_flushlog
+
+	@prev_uesec_flushlog.setter
+	def prev_uesec_flushlog(self, uesec):
+		self._prev_uesec_flushlog = uesec
+
+	@property
 	def loglevel(self):
 		return self._loglevel
 	
@@ -299,7 +309,10 @@ class irsync_st:
 		fp, fh = create_logfile_with_seq(filepath_pattern) # in share.py
 		return fp, fh
 
-	def prn(self, msglevel, msg):
+	def prn(self, msglevel, msg, is_flush_now=False):
+		"""If some log info is important, caller should pass in is_flush=True.
+		[WARN] and [ERR] msg are immediately flushed.
+		"""
 
 		self.lastlog_datetime_str = datetime_str_now(msec=True, compact=True)
 
@@ -311,21 +324,27 @@ class irsync_st:
 		
 		msgline = "[%s]%s %s\n"%(self.lastlog_datetime_str, lvs , msg)
 		
-		self.sess_logfh.write(msgline)
 		print(msgline, end="")
 
-	def err(self, msg):
-		self.prn(MsgLevel.err, msg)
+		# Write and (for every 2 seconds) flush the log file .
+		self.sess_logfh.write(msgline)
+		now = uesec_now()
+		if is_flush_now or (now-self.prev_uesec_flushlog >= 2) or (msglevel in [MsgLevel.err, MsgLevel.warn]):
+			self.sess_logfh.flush()
+			self.prev_uesec_flushlog = now
+
+	def err(self, msg, **args):
+		self.prn(MsgLevel.err, msg, **args)
 		raise Err_irsync(msg) # On err, we raise Exception to conclude our work.
 
-	def warn(self, msg):
-		self.prn(MsgLevel.warn, msg)
+	def warn(self, msg, **args):
+		self.prn(MsgLevel.warn, msg, **args)
 
-	def info(self, msg):
-		self.prn(MsgLevel.info, msg)
+	def info(self, msg, **args):
+		self.prn(MsgLevel.info, msg, **args)
 
-	def dbg(self, msg):
-		self.prn(MsgLevel.dbg, msg)
+	def dbg(self, msg, **args):
+		self.prn(MsgLevel.dbg, msg, **args)
 
 	def prn_masterlog(self, msg):
 		msgline = "[%s]%s\n" % (datetime_str_now(msec=True, compact=True), msg)
@@ -555,7 +574,8 @@ class irsync_st:
 			shell_cmd,
 			os.path.basename(fp_rsync),
 			Seconds_to_HMS_string(rsync_run_secs),
-			line_sep78))
+			line_sep78),
+	    is_flush_now=True)
 		#
 		# Add some banner text at start of fp_rsync.
 		fh_rsync.write("""[%s] This is the console output log of shell command:
