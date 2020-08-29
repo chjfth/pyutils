@@ -597,7 +597,7 @@ class irsync_st:
 
 			# Use warn(instead of error) here, bcz I do not consider it the FINAL error.
 			#
-			self.warn("""rsync run fail, exitcode=%d
+			self.err("""rsync run fail, exitcode=%d
     To know detailed reason. Check rsync console message log at:
         %s""" % (exitcode, fp_rsync))
 
