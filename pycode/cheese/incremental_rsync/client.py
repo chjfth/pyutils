@@ -333,9 +333,12 @@ class irsync_st:
 			self.sess_logfh.flush()
 			self.prev_uesec_flushlog = now
 
+	def err_raise(self, msg, **args):
+		self.prn(MsgLevel.err, msg, **args)
+		raise Err_irsync(msg) # and raise Exception to conclude our work.
+
 	def err(self, msg, **args):
 		self.prn(MsgLevel.err, msg, **args)
-		raise Err_irsync(msg) # On err, we raise Exception to conclude our work.
 
 	def warn(self, msg, **args):
 		self.prn(MsgLevel.warn, msg, **args)
@@ -444,7 +447,7 @@ class irsync_st:
 					"The local_store_dir(finish) has existed already. So I think the backup had been done some time ago.")
 				return
 			else:
-				self.err("I need to create backup directory '%s', but it appears to be a file in the way."%(
+				self.err_raise("I need to create backup directory '%s', but it appears to be a file in the way."%(
 					self.finish_dirpath))
 
 		self.remove_old_ushelfs()
@@ -523,7 +526,7 @@ class irsync_st:
 
 		now = uesec_now()
 		if self.uesec_limit>0 and now>=self.uesec_limit:
-			self.err("""The rsync subprocess will not run, due to irsync session time limit({} hours, {} minutes, {} seconds).""".format(
+			self.err_raise("""The rsync subprocess will not run, due to irsync session time limit({} hours, {} minutes, {} seconds).""".format(
 				*Seconds_to_DHMS(self._max_irsync_seconds)[1:4]
 			))
 			raise Err_irsync("Irsync session fail, due to session time limit.")
@@ -595,7 +598,7 @@ class irsync_st:
 				)
 				self.warn(kill_msg)
 
-			# Use warn(instead of error) here, bcz I do not consider it the FINAL error.
+			# Use .err(instead of .err_raise) here, bcz I do not consider it the FINAL error.
 			#
 			self.err("""rsync run fail, exitcode=%d
     To know detailed reason. Check rsync console message log at:
