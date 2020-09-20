@@ -431,7 +431,7 @@ class irsync_st:
 					RemoveDir_IfEmpty(dirpath_old)
 
 		if delete_count==0:
-			self.prn_masterlog("No backups are stale, leaving them alone this time.")
+			self.prn_masterlog("No existing backups are stale, leaving them alone this time.")
 
 
 	def run_irsync_session_once(self):
