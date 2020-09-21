@@ -332,6 +332,10 @@
     <keyboard-shortcut first-keystroke="shift ctrl alt up" />
   </action>
   <action id="NextEditorTab" />
+  <action id="NextProjectWindow" />
+  <action id="NextTab">
+    <keyboard-shortcut first-keystroke="ctrl alt close_bracket" />
+  </action>
   <action id="OpenFile">
     <keyboard-shortcut first-keystroke="ctrl o" />
   </action>
@@ -342,6 +346,10 @@
     <keyboard-shortcut first-keystroke="shift ctrl p" />
   </action>
   <action id="PreviousEditorTab" />
+  <action id="PreviousProjectWindow" />
+  <action id="PreviousTab">
+    <keyboard-shortcut first-keystroke="ctrl alt open_bracket" />
+  </action>
   <action id="QuickActionPopup" />
   <action id="QuickChangeScheme" />
   <action id="QuickImplementations">
