@@ -2,7 +2,7 @@
 # coding: utf-8
 
 """
-MTLog means Multi-Target Logger.
+MTLogger means Multi-Target Logger.
 
 When a piece of application code generates a piece of log message, that log message may be dispatched(=copied)
 to multiple target. For example, the message may be printed to CMD console, or as well be written to a logfile.
@@ -25,25 +25,26 @@ import time, math
 from collections import namedtuple
 from cheese.pycook3.classhelper import typed_property
 
-class MTLog:
+class MTLogger:
 
 	Target = namedtuple('Target', "sinklevel logcall")
 
-	datetime_format = typed_property('datetime_format', str, '__')
-	need_millisec = typed_property('need_millisec', bool, '__')
-	need_levelname = typed_property('need_levelstr', bool, '__')
+	datetime_format = typed_property('datetime_format', str)
+	need_millisec = typed_property('need_millisec', bool)
+	need_levelname = typed_property('need_levelstr', bool)
+	level2name = typed_property('level2name', dict)
 
-	def __init__(self, datetime_format='%Y%m%d.%H%M%S', need_millisec=False, need_levelname=False):
+	def __init__(self, datetime_format='%Y%m%d.%H%M%S', need_millisec=False,
+	             need_levelname=False, level2name={}):
 		self.__targets = {}
-		self.__level2name = {}
 		self.datetime_format = datetime_format
 		self.need_millisec = need_millisec
 		self.need_levelname = need_levelname
+		self.level2name = level2name
 
 
 	def add_target(self, targetname, sinklevel, logcall):
 		self.__targets[targetname] = __class__.Target(sinklevel, logcall)
-		self.__level2name[sinklevel] = targetname
 
 	def datetime_str(self):
 		uesec = time.time()
@@ -75,8 +76,8 @@ class MTLog:
 
 		levelstr = ""
 		if self.need_levelname:
-			if sourcelevel in self.__level2name.keys():
-				levelstr = "[%s]" % (self.__level2name[sourcelevel])
+			if sourcelevel in self.level2name.keys():
+				levelstr = "[%s]" % (self.level2name[sourcelevel])
 
 		msg_final = "[%s]%s%s\n" % (self.datetime_str(), levelstr, msg)
 
@@ -89,19 +90,21 @@ class MTLog:
 
 if __name__=='__main__':
 
-	def print1(s): print("!!%s"%(s), end='')
-	def print2(s): print("##%s"%(s), end='')
+	def print1(s): print("UI:%s"%(s), end='')
+	def print2(s): print("FL:%s"%(s), end='')
 
-	mtl = MTLog(need_millisec=True, need_levelname=True)
-	mtl.add_target('ERROR', 1, print1)
-	mtl.add_target('WARN', 2, print2)
-	mtl.add_target('INFO', 5, print2)
+	lvnames = {1:"ERROR", 2:"WARN", 5:"INFO"}
+	mtl = MTLogger(need_millisec=True, need_levelname=True, level2name=lvnames)
+	mtl.add_target('log_to_UI', 1, print1)
+	mtl.add_target('log_to_FILE', 2, print2)
 
 	mtl.log(1, "an error message")
 	print("")
-	mtl.log(2, "an warning message")
+	mtl.log(2, "a warning message")
 	print("")
-	mtl.log(3, "an info message") # this will not print [INFO] prefix, due to 5!=3
+
+	# This will not print [INFO] prefix, bcz 3 is not mapped to a level name.
+	mtl.log(3, "an info message")
 	print("")
 	time.sleep(0.1)
-	mtl.log(1, "2nd error message", targets='ERROR')
+	mtl.log(1, "2nd error message", targets='log_to_UI')
