@@ -38,6 +38,9 @@ class AsFilelock:
 		self.lockpath = filepath_as_lock
 		self.fhlock = None
 
+	def __del__(self):
+		self.unlock() # to-test
+
 	@property
 	def abslockpath(self):
 		return os.path.abspath(self.lockpath)
