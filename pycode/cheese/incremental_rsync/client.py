@@ -522,6 +522,7 @@ class irsync_st:
 				INISEC_last_success_dirpath, self.ini_filepath))
 		return
 
+
 	def call_rsync_subprocess_once(self, last_succ_dirpath):
 
 		now = uesec_now()
