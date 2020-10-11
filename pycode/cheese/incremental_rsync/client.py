@@ -10,11 +10,15 @@ import traceback
 from pathlib import Path
 from enum import Enum,IntEnum # since Python 3.4
 from collections import namedtuple
+from functools import partial, partialmethod
 
 from cheese.filelock.assistive_filelock import AsFilelock, Err_asfilelock
+from cheese.logger.MTLogger import MTLogger
+from cheese.logger.LoggerFence import LoggerFence,LiveFence
 
 from .share import *
 from .helper import *
+
 
 LOG_NOD = '__logs__' # as directory node name for storing log files.
 
@@ -46,9 +50,14 @@ def value_not_negative(irsync_args, argname, argval):
 	if argval<0:
 		raise Err_irsync("Error: The parameter(%s) must not be a negative value(%d)."%(argname, argval))
 
-class irsync_st:
+class irsync_st(LoggerFence):
 
-	pfxMsgLevel = [""]*5
+	logtarget_cui = "CUI"
+	logtarget_file = "LOGFILE"
+	loglevel2name = {MsgLevel.err.value:"ERROR", MsgLevel.warn.value:"WARN", MsgLevel.info.value:"INFO",
+	                 MsgLevel.dbg.value:"DBG"}
+
+	pfxMsgLevel = [""]*5 # todel
 	pfxMsgLevel[MsgLevel.err.value] = "[ERROR]"
 	pfxMsgLevel[MsgLevel.warn.value] = "[WARN]"
 	pfxMsgLevel[MsgLevel.info.value] = "[INFO]"
@@ -56,7 +65,7 @@ class irsync_st:
 	
 	datetime_pattern_default = "YYYYMMDD"
 	
-	def _nouse_save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name, fn_check_valid=None, *fn_args):
+	def __xxx_nouse_save_extra_args(self, args, argname, selfattr_desiredtype, selfattr_name, fn_check_valid=None, *fn_args):
 		""" Search args[] for a param named argname. If found, validate it and save it as self's attribute.
 
 		:param args: User input params, a dict. There may be valid ones and invalid ones.
@@ -98,9 +107,8 @@ class irsync_st:
 	def master_logfile_lck(self):
 		return self.master_logfile + ".lck"
 
-	@property
-	def sess_logfile_success(self):
-		return self.sess_logfile.replace(self.working_dirpath, self.finish_dirpath)
+	def to_success_path(self, inpath):
+		return inpath.replace(self.working_dirpath, self.finish_dirpath)
 
 	@property
 	def ini_filepath(self):
@@ -118,7 +126,6 @@ class irsync_st:
 		"""Prefix local_store_dir to rela_path so to make an absolute dir."""
 		return os.path.join(self.local_store_dir, rela_path)
 
-	#def __init__(self, rsync_url, local_store_dir, local_shelf="", datetime_pattern="", **args):
 	def __init__(self, apargs, rsync_extra_params):
 
 		# apargs is the argparse.ArgumentParser object that accommodates all user parameters.
@@ -174,7 +181,7 @@ class irsync_st:
 		if not local_shelf:
 			local_shelf = spath.rstrip("/").split("/")[-1] # final word of spath
 
-		# TODO: ensure no / in shelf name
+		# TODO: ensure no "/" in shelf name
 
 		self.ushelf_name = "%s.%s"%(server_goodchars, local_shelf)
 		
@@ -227,10 +234,18 @@ class irsync_st:
     Detail: %s
 """%(self.local_store_dir, e.errmsg))
 
-		self.master_logfh = open(self.master_logfile, "a")
+		self.master_logfh = open(self.master_logfile, "a", encoding="utf8")
 		self.master_logfh.write("\n"+ "~"*78 +"\n") # We don't want timestamp on this linesep char
 
-		self.prn_masterlog("""Irsync session start.
+		def masterlog_sink(text):
+			self.master_logfh.write(text)
+			self.master_logfh.flush()
+
+		self.mtl = MTLogger(need_millisec=True, need_levelname=True, level2name=__class__.loglevel2name)
+		self.mtl.add_target(__class__.logtarget_cui, MsgLevel.info.value, print_nolf)
+		self.mtl.add_target(__class__.logtarget_file, MsgLevel.info.dbg, masterlog_sink)
+
+		self.masterlogI("""Irsync session start.
     rsync_url:                {}
     local_store_dir(working): {}
     local_store_dir(finish) : {}
@@ -240,6 +255,8 @@ class irsync_st:
             self.finish_dirpath
 		    )
 		)
+
+		super().__init__(masterlog_sink)
 		return
 
 	def master_logfile_end(self, is_succ):
@@ -255,7 +272,7 @@ class irsync_st:
     Get your backup at:
         %s
     Session log file  :
-        %s"""%(self.finish_dirpath, self.sess_logfile_success))
+        %s"""%(self.finish_dirpath, self.sess_logfile_success)) # todo: WRONG CODE
 
 			self.prn_masterlog('Irsync session success. %s'%(runtime))
 		else:
@@ -303,16 +320,16 @@ class irsync_st:
 	def loglevel(self, level):
 		self._loglevel = level
 
-	def create_logfile(self):
+	def create_sess_logfile(self):
 		filename_pattern = "%s.run*.log"%(self.datetime_vault)
 		filepath_pattern = os.path.join(self.working_dirpath, LOG_NOD, filename_pattern)
 		fp, fh = create_logfile_with_seq(filepath_pattern) # in share.py
 		return fp, fh
 
+	"""
 	def prn(self, msglevel, msg, is_flush_now=False):
-		"""If some log info is important, caller should pass in is_flush=True.
-		[WARN] and [ERR] msg are immediately flushed.
-		"""
+		#If some log info is important, caller should pass in is_flush=True.
+		#[WARN] and [ERR] msg are immediately flushed.
 
 		self.lastlog_datetime_str = datetime_str_now(msec=True, compact=True)
 
@@ -332,32 +349,39 @@ class irsync_st:
 		if is_flush_now or (now-self.prev_uesec_flushlog >= 2) or (msglevel in [MsgLevel.err, MsgLevel.warn]):
 			self.sess_logfh.flush()
 			self.prev_uesec_flushlog = now
+	"""
+#	def err_raise(self, msg, **args):
+#		self.prn(MsgLevel.err, msg, **args)
+#		raise Err_irsync(msg) # and raise Exception to conclude our work.
 
-	def err_raise(self, msg, **args):
-		self.prn(MsgLevel.err, msg, **args)
-		raise Err_irsync(msg) # and raise Exception to conclude our work.
+#	def err(self, msg, **args):
+#		self.prn(MsgLevel.err, msg, **args)
 
-	def err(self, msg, **args):
-		self.prn(MsgLevel.err, msg, **args)
+#	def warn(self, msg, **args):
+#		self.prn(MsgLevel.warn, msg, **args)
 
-	def warn(self, msg, **args):
-		self.prn(MsgLevel.warn, msg, **args)
+#	def info(self, msg, **args):
+#		self.prn(MsgLevel.info, msg, **args)
 
-	def info(self, msg, **args):
-		self.prn(MsgLevel.info, msg, **args)
+#	def dbg(self, msg, **args):
+#		self.prn(MsgLevel.dbg, msg, **args)
 
-	def dbg(self, msg, **args):
-		self.prn(MsgLevel.dbg, msg, **args)
+	# def prn_masterlog(self, msg): # todel
+	# 	msgline = "[%s]%s\n" % (datetime_str_now(msec=True, compact=True), msg)
+	#
+	# 	self.master_logfh.write(msgline)
+	# 	self.master_logfh.flush()
+	#
+	# 	print(msgline, end="")
 
-	def prn_masterlog(self, msg):
-		msgline = "[%s]%s\n" % (datetime_str_now(msec=True, compact=True), msg)
+	def masterlog(self, sourcelevel, msg):
+		self.mtl.log(sourcelevel, msg)
 
-		self.master_logfh.write(msgline)
-		self.master_logfh.flush()
+	masterlogE = partialmethod(masterlog, MsgLevel.err.value)
+	masterlogW = partialmethod(masterlog, MsgLevel.warn.value)
+	masterlogI = partialmethod(masterlog, MsgLevel.info.value)
 
-		print(msgline, end="")
-
-	def prn_start_info(self):
+	def __xxx_prn_start_info(self):
 		pass
 
 	def sess_done_write_timestamp(self):
@@ -398,7 +422,7 @@ class irsync_st:
 		if sec_keep<=0:
 			return
 
-		self.prn_masterlog("User requests removing backups older than %d days, %d hours, %d minutes."%(
+		self.masterlogI("User requests removing backups older than %d days, %d hours, %d minutes."%(
 			Seconds_to_DHMS(sec_keep)[0:3]
 		))
 
@@ -415,7 +439,7 @@ class irsync_st:
 				str_DHM = "{} days, {} hours, {} minutes".format(*Seconds_to_DHMS(sec_stale)[0:3])
 
 				if dirpath_old in last_success_dirpaths:
-					self.prn_masterlog("""Seeing old backup at: (created %s ago (%d seconds stale))
+					self.masterlogI("""Seeing old backup at: (created %s ago (%d seconds stale))
     %s
 --but do not remove it because it is recorded in %s as last-success (precious for later incremental backup)."""%(
 						str_DHM, sec_stale,
@@ -423,7 +447,7 @@ class irsync_st:
 						ININAM_irsync_master
 					))
 				else:
-					self.prn_masterlog("""Removing old backup at: (created %s ago (%d seconds stale))
+					self.masterlogI("""Removing old backup at: (created %s ago (%d seconds stale))
     %s"""%(str_DHM, sec_stale, dirpath_old))
 
 					shutil.rmtree(dirpath_old)
@@ -431,9 +455,10 @@ class irsync_st:
 					RemoveDir_IfEmpty(dirpath_old)
 
 		if delete_count==0:
-			self.prn_masterlog("No existing backups are stale, leaving them alone this time.")
+			self.masterlogI("No existing backups are stale, leaving them alone this time.")
 
 
+	@LoggerFence.mark_api
 	def run_irsync_session_once(self):
 		"""
 		Return normally on success, raise Exception on error.
@@ -443,11 +468,12 @@ class irsync_st:
 		
 		if os.path.exists(self.finish_dirpath):
 			if os.path.isdir(self.finish_dirpath):
-				self.prn_masterlog(
-					"The local_store_dir(finish) has existed already. So I think the backup had been done some time ago.")
+				self.masterlogI(
+					"The local_store_dir(finish) has existed already. So I think the backup had been done some time ago."
+				)
 				return
 			else:
-				self.err_raise("I need to create backup directory '%s', but it appears to be a file in the way."%(
+				raise Err_irsync("I need to create backup directory '%s', but it appears to be a file in the way."%(
 					self.finish_dirpath))
 
 		self.remove_old_ushelfs()
@@ -455,55 +481,70 @@ class irsync_st:
 		# Create session logging filename and save its handle. If error, raise exception.
 		#
 		try:
-			self.sess_logfile, self.sess_logfh = self.create_logfile()
-			sesslog_d, sesslog_n = os.path.split(self.sess_logfile)
+			sess_logfile, sess_logfh = self.create_sess_logfile()
+			sesslog_d, sesslog_n = os.path.split(sess_logfile)
 			assert( sesslog_d.startswith(self.working_dirpath) ) # sesslog_d has an extra 'logs' subdir
-			self.prn_masterlog("""Session logfile can be found at:
+			self.masterlogI("""Session logfile can be found at:
     (working) : {}
     (finish)  : {}
 """.format      (
-				self.sess_logfile,
-				self.sess_logfile_success
+				sess_logfile,
+				self.to_success_path(sess_logfile)
 				)
 			)
-		except:
-			# todo:: in the future, may employ a more detailed error message stack.
-			self.prn_masterlog("Unexpected! Fail to create a session logfile.")
+		except OSError as e:
+			# todo:: in the future, may also dump stacktrace to logfile(but not print to console).
+			self.masterlogE("Unexpected! Fail to create rsync session logfile: %s"%(self.sess_logfile))
 			raise
 
-		self.info("irsync session - run() start")
+		def sesslog_sink(text):
+			sess_logfh.write(text)
+			sess_logfh.flush()
 
-		# Check whether last-success dir exists
+		sess_logger = MTLogger(need_millisec=True, need_levelname=True, level2name=__class__.loglevel2name)
+		sess_logger.add_target(__class__.logtarget_cui, MsgLevel.info.value, print_nolf)
+		sess_logger.add_target(__class__.logtarget_file, MsgLevel.info.dbg, sesslog_sink)
+
+		sesslogE = partial(sess_logger.log, MsgLevel.err.value)
+		sesslogW = partial(sess_logger.log, MsgLevel.warn.value)
+		sesslogI = partial(sess_logger.log, MsgLevel.info.value)
+
+		sesslogI("run_irsync_session_once() start.")
+
+		# I put the irsync session code in a LiveFence context, so that in case an unknown exception
+		# is raise within, the LiveFence will record the stacktrace into sess_logfile, and still
+		# let that exception propagate.
 		#
-		last_succ_dirpath = ReadIniItem(self.ini_filepath, INISEC_last_success_dirpath, self.ushelf_name)
-		if last_succ_dirpath:
-			if os.path.isdir(last_succ_dirpath):
-				self.info('Accelerate with last-success dirpath: "%s"'%(last_succ_dirpath))
-			else:
-				self.warn('INI recorded last-success dirpath NOT exists: "%s"'%(last_succ_dirpath))
-				last_succ_dirpath = ""
+		with LiveFence( partial(sess_logger.log, MsgLevel.err.value, targets=__class__.logtarget_file) ):
+			# Check whether last-success dir exists
+			#
+			last_succ_dirpath = ReadIniItem(self.ini_filepath, INISEC_last_success_dirpath, self.ushelf_name)
+			if last_succ_dirpath:
+				if os.path.isdir(last_succ_dirpath):
+					sesslogI('Accelerate with last-success dirpath: "%s"'%(last_succ_dirpath))
+				else:
+					sesslogW('INI recorded last-success dirpath NOT exists: "%s"'%(last_succ_dirpath))
+					last_succ_dirpath = ""
 
-		os.makedirs(self.working_dirpath, exist_ok=True)
+			os.makedirs(self.working_dirpath, exist_ok=True)
 
-		now_retry = 0
-		while True:
-			try:
-				self.call_rsync_subprocess_once(last_succ_dirpath)
-				break # bcz we succeeded
-			except Err_rsync_exec:
-				now_retry += 1
+			now_retry = 0
+			while True:
+				try:
+					self.call_rsync_subprocess_once(sess_logfile, sess_logger, last_succ_dirpath)
+					break # bcz we succeeded
+				except Err_rsync_exec:
+					now_retry += 1
 
-				if now_retry > self._max_retry:
-					if self._max_retry > 0:
-						self.warn("The rsync retrying count %d all exhausted."%(self._max_retry))
-					raise # failure
+					if now_retry > self._max_retry:
+						if self._max_retry > 0:
+							sesslogE("The rsync retrying count %d all exhausted."%(self._max_retry))
+						raise # failure
 
-				self.warn("Retrying rsync subprocess %d/%d ..."%(now_retry, self._max_retry))
-				time.sleep(1.0)
+					sesslogW("Retrying rsync subprocess %d/%d ..."%(now_retry, self._max_retry))
+					time.sleep(1.0)
 
-
-		self.sess_logfh.close()
-		self.sess_logfh = None
+		sess_logfh.close()
 
 		self.sess_done_write_timestamp()
 
@@ -523,11 +564,11 @@ class irsync_st:
 		return
 
 
-	def call_rsync_subprocess_once(self, last_succ_dirpath):
+	def call_rsync_subprocess_once(self, sess_logfile, sess_logger, last_succ_dirpath):
 
 		now = uesec_now()
 		if self.uesec_limit>0 and now>=self.uesec_limit:
-			self.err_raise("""The rsync subprocess will not run, due to irsync session time limit({} hours, {} minutes, {} seconds).""".format(
+			raise Err_irsync("""The rsync subprocess will not run, due to irsync session time limit({} hours, {} minutes, {} seconds).""".format(
 				*Seconds_to_DHMS(self._max_irsync_seconds)[1:4]
 			))
 			raise Err_irsync("Irsync session fail, due to session time limit.")
@@ -556,17 +597,17 @@ class irsync_st:
 
 		# Create logfile for rsync-subprocess's console output message.
 		#
-		# If irsync session logfile(self.sess_logfile) is 20200414.run0.log,
+		# If irsync session logfile(sess_logfile) is 20200414.run0.log,
 		# We will create rsync logfile with pattern 20200414.run0.rsync*.log ,
 		# so that we know the "...rsync0.log", "...rsync1.log" belongs to run0.
 		#
-		rsync_logfile_pattern = '.rsync*'.join(os.path.splitext(self.sess_logfile))
+		rsync_logfile_pattern = '.rsync*'.join(os.path.splitext(sess_logfile))
 		fp_rsync, fh_rsync = create_logfile_with_seq(os.path.join(self.working_dirpath, rsync_logfile_pattern))
 
 		# Construct subprocess startup log text:
 		argv_hint_lines = ["{0}argv[{1}] = {2}".format(' ' * 8, i, s) for i, s in enumerate(rsync_argv)]
 		shell_cmd = ' '.join([shlex.quote(onearg) for onearg in rsync_argv])
-		self.info("""Launching rsync subprocess with argv[]:
+		sess_logger.log(MsgLevel.info.value, """Launching rsync subprocess with argv[]:
 %s
     The corresponding shell command line is (for your manual debugging):
 	    %s
@@ -578,37 +619,38 @@ class irsync_st:
 			shell_cmd,
 			os.path.basename(fp_rsync),
 			Seconds_to_HMS_string(rsync_run_secs),
-			line_sep78),
-	    is_flush_now=True)
+			line_sep78)
+#		  , is_flush_now=True  // future optimization
+		)
 		#
 		# Add some banner text at start of fp_rsync.
 		fh_rsync.write("""[%s] This is the console output log of shell command:
     %s
 %s
-""" % (self.lastlog_datetime_str, shell_cmd, line_sep78))
+""" % (sess_logger.last_datetimestr, shell_cmd, line_sep78))
 		#
 		raise ValueError('Hehe, DELIBERATE RAISE ERROR HERE.')
 		(exitcode, kill_at_uesec) = run_exe_log_output_and_print(
 			rsync_argv, rsync_run_secs, {"shell": False}, fh_rsync)
 
 		if exitcode == 0:
-			self.info("rsync run success.")
+			sess_logger.log(MsgLevel.info.value, "rsync run success.")
 		else:
 			if kill_at_uesec > 0:
 				kill_msg = "rsync max run-time limit exceeded. Kill signal has been issued at %s ." % (
 					datetime_str_by_uesec(kill_at_uesec)
 				)
-				self.warn(kill_msg)
+				sess_logger.log(MsgLevel.err.value, kill_msg)
 
 			# Use .err(instead of .err_raise) here, bcz I do not consider it FINAL error.
 			#
-			self.err("""rsync run fail, exitcode=%d
+			sess_logger.log(MsgLevel.err.value, """rsync run fail, exitcode=%d
     To know detailed reason. Check rsync console message log at:
         %s""" % (exitcode, fp_rsync))
 
 			raise Err_rsync_exec(exitcode, self.ushelf_name)  # The caller may retry rsync.exe later
 
-		self.info("irsync session - run() end")
+#		self.info("irsync session - run() end")
 
 		# Move .working-directory into finish-directory
 		#

@@ -41,7 +41,12 @@ class MTLogger:
 		self.need_millisec = need_millisec
 		self.need_levelname = need_levelname
 		self.level2name = level2name
+		#
+		self.__last_datetimestr = ""
 
+	@property
+	def last_datetimestr(self):
+		return self.__last_datetimestr
 
 	def add_target(self, targetname, sinklevel, logcall):
 		self.__targets[targetname] = __class__.Target(sinklevel, logcall)
@@ -79,7 +84,8 @@ class MTLogger:
 			if sourcelevel in self.level2name.keys():
 				levelstr = "[%s]" % (self.level2name[sourcelevel])
 
-		msg_final = "[%s]%s%s\n" % (self.datetime_str(), levelstr, msg)
+		self.__last_datetimestr = self.datetime_str()
+		msg_final = "[%s]%s%s\n" % (self.__last_datetimestr, levelstr, msg)
 
 		for tgname in tgnames:
 			target = self.__targets[tgname]
