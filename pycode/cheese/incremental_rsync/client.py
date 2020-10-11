@@ -155,7 +155,7 @@ class irsync_st:
 			#self.is_run_time_limit = False
 			self.uesec_limit = 0
 		#
-		self._finish_dir_filename = apargs.finish_dir_filename
+		self._finish_dir_write_to = apargs.finish_dir_write_to
 		self._finish_dir_relative = apargs.finish_dir_relative
 		#
 		self._rsync_extra_params = rsync_extra_params
@@ -586,6 +586,7 @@ class irsync_st:
 %s
 """ % (self.lastlog_datetime_str, shell_cmd, line_sep78))
 		#
+		raise ValueError('Hehe, DELIBERATE RAISE ERROR HERE.')
 		(exitcode, kill_at_uesec) = run_exe_log_output_and_print(
 			rsync_argv, rsync_run_secs, {"shell": False}, fh_rsync)
 
@@ -613,8 +614,8 @@ class irsync_st:
 		fh_rsync.close()
 
 	def success_cleanup(self):
-		if self._finish_dir_filename:
-			hint_fp = os.path.abspath(self._finish_dir_filename)
+		if self._finish_dir_write_to:
+			hint_fp = os.path.abspath(self._finish_dir_write_to)
 			hint_text = self.finish_dirpath
 			if self._finish_dir_relative:
 				hint_text = self.finish_dirpath_rela

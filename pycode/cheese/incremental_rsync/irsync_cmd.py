@@ -93,7 +93,7 @@ def init_irsync_argparser():
 	ap.add_argument('--max-irsync-minutes', type=int, dest='max_irsync_minutes', default=0, help=argparse.SUPPRESS)
 	ap.add_argument('--max-irsync-seconds', type=int, dest='max_irsync_seconds', default=0, help=argparse.SUPPRESS)
 
-	ap.add_argument('--finish-dir-write-to', type=str, dest='finish_dir_filename',
+	ap.add_argument('--finish-dir-write-to', type=str, dest='finish_dir_write_to',
 	    help='This assign a filename. If backup success, the final backup directory(full-path) '
 	        'will be written to this filename, so the caller can know it and do some post actions. '
 	        'But if the backup fails, the original content of this filename will not be touched. '
