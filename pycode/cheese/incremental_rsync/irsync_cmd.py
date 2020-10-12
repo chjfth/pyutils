@@ -100,7 +100,7 @@ def init_irsync_argparser():
 	        'Sure, it can be a bare filename, or a filename with absolute/relative path prefix.'
 	)
 	ap.add_argument('--finish-dir-relative', action="store_true", dest='finish_dir_relative',
-		help='Use with --fetch-finish-dir-from=<filename>. If present, the dirpath written to <filename> '
+		help='Use with --finish-dir-write-to=<filename>. If present, the dirpath written to <filename> '
 	        'will be a relative path to current working directory, if possible.'
 	)
 

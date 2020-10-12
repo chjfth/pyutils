@@ -18,6 +18,9 @@ class MsgLevel(IntEnum):
 	info = 3
 	dbg = 4
 
+def print_nolf(msg):
+	print(msg, end='')
+
 class Err_irsync(Exception):
 	def __init__(self, errmsg, errcode=-1):
 		self.errcode = errcode

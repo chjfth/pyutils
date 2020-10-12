@@ -47,3 +47,15 @@ def LiveFence(logcall):
 		logcall(excpt_text)
 		raise
 
+def test1():
+	fh = open("mylog.txt", "a", encoding="utf8")
+	fh.write( time.strftime('%Y-%m-%d %H:%M:%S\n', time.localtime()) )
+
+	with LiveFence(fh.write) as sth:
+	    result = DoDiv(6, 2)
+	    fh.write("DoDiv returns: %d\n"%(result))
+
+	with LiveFence(fh.write) as sth:
+	    result = DoDiv(6, 0) # this will cause exception
+	    fh.write("DoDiv returns: %d\n"%(result))
+
