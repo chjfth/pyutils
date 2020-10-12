@@ -524,6 +524,13 @@
   <action id="XDebugger.MuteBreakpoints">
     <keyboard-shortcut first-keystroke="shift ctrl alt f10" />
   </action>
+  <action id="GotoNextElementUnderCaretUsage">
+    <keyboard-shortcut first-keystroke="f2" />
+  </action>
+  <action id="GotoPrevElementUnderCaretUsage">
+    <keyboard-shortcut first-keystroke="shift f2" />
+  </action>
+  
   <action id="hg4idea.QRefresh" />
   <action id="tasks.goto" />
 </keymap>
