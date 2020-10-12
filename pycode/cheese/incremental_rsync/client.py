@@ -456,6 +456,7 @@ Check session log file for details:
 				self.masterlogI(
 					"The local_store_dir(finish) has existed already. So I think the backup had been done some time ago."
 				)
+				self.record_finish_dir_by_user()
 				return
 			else:
 				raise Err_irsync("I need to create backup directory '%s', but it appears to be a file in the way."%(
