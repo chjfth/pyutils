@@ -219,6 +219,9 @@ class irsync_st(LoggerFence):
 		return
 
 	def master_logfile_start(self):
+
+		self._sess_logfile = None
+
 		#
 		# Acquire master-logfile's filelock first, so to ensure we're the only process
 		# that is storing into this local_store_dir. If acquire-filelock fails, just quit.
@@ -241,6 +244,11 @@ class irsync_st(LoggerFence):
 			self.master_logfh.write(text)
 			self.master_logfh.flush()
 
+		def masterlog_excpt_sanction(excpt_text):
+			masterlog_sink(excpt_text)
+			self.irsync_report_new_failure()
+			self.masterlogE(self.getmsg_report_time_cost(False))
+
 		self.mtl = MTLogger(need_millisec=True, need_levelname=True, level2name=__class__.loglevel2name)
 		self.mtl.add_target(__class__.logtarget_cui, MsgLevel.info.value, print_nolf)
 		self.mtl.add_target(__class__.logtarget_file, MsgLevel.info.dbg, masterlog_sink)
@@ -256,51 +264,8 @@ class irsync_st(LoggerFence):
 		    )
 		)
 
-		super().__init__(masterlog_sink)
+		super().__init__(masterlog_excpt_sanction)
 		return
-
-	def master_logfile_end(self, is_succ):
-
-		uesec_end = time.time()
-		run_seconds = int(uesec_end - self.uesec_start)
-
-		runtime = "(Run-time: %d seconds =%dh,%dm,%ss)"%(run_seconds, *Seconds_to_DHMS(run_seconds)[1:4])
-
-		if is_succ:
-			if hasattr(self, 'sess_logfile'): # implies validity of .sess_logfile_success
-				self.prn_masterlog("""Irsync session success. 
-    Get your backup at:
-        %s
-    Session log file  :
-        %s"""%(self.finish_dirpath, self.sess_logfile_success)) # todo: WRONG CODE
-
-			self.prn_masterlog('Irsync session success. %s'%(runtime))
-		else:
-			self.prn_masterlog('Irsync session fail. %s'%(runtime))
-
-		self.master_filelock.unlock()
-		self.master_logfh.close()
-
-	def log_finalize_due_to_exception(self):
-		exctype, excvalue, _ = sys.exc_info()
-
-		re_raise = True
-		if issubclass(exctype, Err_irsync):
-			# For our explict Err_irsync class, comprehensive error info should have been printed,
-			# so no need to dump the mystic Python call-stack in whole.
-			re_raise = False
-		else:
-			excpt_text = traceback.format_exc()
-			self.prn_masterlog(excpt_text)
-
-		self.prn_masterlog("""Irsync session stopped due to error/exception above! 
-    Check session logfile at:
-        %s
-    Partial backup may be found at:
-        %s""" % (self.sess_logfile, self.working_dirpath))
-
-		self.master_logfile_end(False)
-		return re_raise
 
 	@property
 	def prev_uesec_flushlog(self):
@@ -326,54 +291,6 @@ class irsync_st(LoggerFence):
 		fp, fh = create_logfile_with_seq(filepath_pattern) # in share.py
 		return fp, fh
 
-	"""
-	def prn(self, msglevel, msg, is_flush_now=False):
-		#If some log info is important, caller should pass in is_flush=True.
-		#[WARN] and [ERR] msg are immediately flushed.
-
-		self.lastlog_datetime_str = datetime_str_now(msec=True, compact=True)
-
-		if self.loglevel.value < msglevel.value:
-			return
-
-		lvn = msglevel.value
-		lvs = __class__.pfxMsgLevel[lvn]
-		
-		msgline = "[%s]%s %s\n"%(self.lastlog_datetime_str, lvs , msg)
-		
-		print(msgline, end="")
-
-		# Write and (for every 2 seconds) flush the log file .
-		self.sess_logfh.write(msgline)
-		now = uesec_now()
-		if is_flush_now or (now-self.prev_uesec_flushlog >= 2) or (msglevel in [MsgLevel.err, MsgLevel.warn]):
-			self.sess_logfh.flush()
-			self.prev_uesec_flushlog = now
-	"""
-#	def err_raise(self, msg, **args):
-#		self.prn(MsgLevel.err, msg, **args)
-#		raise Err_irsync(msg) # and raise Exception to conclude our work.
-
-#	def err(self, msg, **args):
-#		self.prn(MsgLevel.err, msg, **args)
-
-#	def warn(self, msg, **args):
-#		self.prn(MsgLevel.warn, msg, **args)
-
-#	def info(self, msg, **args):
-#		self.prn(MsgLevel.info, msg, **args)
-
-#	def dbg(self, msg, **args):
-#		self.prn(MsgLevel.dbg, msg, **args)
-
-	# def prn_masterlog(self, msg): # todel
-	# 	msgline = "[%s]%s\n" % (datetime_str_now(msec=True, compact=True), msg)
-	#
-	# 	self.master_logfh.write(msgline)
-	# 	self.master_logfh.flush()
-	#
-	# 	print(msgline, end="")
-
 	def masterlog(self, sourcelevel, msg):
 		self.mtl.log(sourcelevel, msg)
 
@@ -384,7 +301,9 @@ class irsync_st(LoggerFence):
 	def __xxx_prn_start_info(self):
 		pass
 
-	def sess_done_write_timestamp(self):
+	def ushelf_record_finish_timestamp(self):
+		# This on-disk timestamp is used to determine whether a ushelf is out-dated
+		# on next irsync run.
 		uesec = int(time.time())
 		tmlocal = time.localtime(uesec)
 		localtime_str = time.strftime("%Y-%m-%d %H:%M:%S", tmlocal)
@@ -395,6 +314,72 @@ class irsync_st(LoggerFence):
 		]
 		for t in ini_content:
 			WriteIniItem(self.sess_done_ini_filepath, INISEC_sess_done, t[0], t[1])
+
+	def ushelf_rename_to_finish_dir(self):
+		try:
+			os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
+			os.rename(self.working_dirpath, self.finish_dirpath) # move and rename the dir
+		except OSError:
+			raise Err_irsync("Error: Irsync session succeeded, but fail to move working directory to finish directory.")
+
+	def ushelf_record_last_finish_dir(self):
+		# Record this on-disk info, so that next rsync run can --link-dest= to it.
+		try:
+			WriteIniItem(self.ini_filepath, INISEC_last_success_dirpath,
+		             self.ushelf_name, self.finish_dirpath_rela)
+		except OSError:
+			raise Err_irsync('Error: Cannot record [%s] information into file "%s"'%(
+				INISEC_last_success_dirpath, self.ini_filepath))
+		return
+
+	def record_finish_dir_by_user(self):
+		if self._finish_dir_write_to:
+			hint_fp = os.path.abspath(self._finish_dir_write_to)
+			hint_text = self.finish_dirpath
+			if self._finish_dir_relative:
+				hint_text = self.finish_dirpath_rela
+
+			msg_pfx = """Write finish ushelf directory to file:
+    %s
+-- """ % (hint_fp)
+
+			try:
+				open(hint_fp, "w").write(hint_text)
+				self.masterlogI(msg_pfx+"SUCCESS.")
+			except:
+				raise Err_irsync(msg_pfx+"FAIL!");
+
+	def irsync_report_new_success(self, logfile_success):
+		# "new" success, means we have just created a new backup.
+		# Detecing a existed backup from previous run is not considered "new".
+		self.masterlogI("""Irsync session success. 
+Get your backup at:
+    %s
+Session log file  :
+    %s""" % (self.finish_dirpath, logfile_success))
+
+	def irsync_report_new_failure(self):
+		logfile = self._sess_logfile
+		if not logfile:
+			logfile = "(None)"
+
+		self.masterlogE("""Irsync session fail!
+Partial backup may be found at:
+    %s
+Check session log file for details:
+    %s""" %(self.working_dirpath, logfile))
+
+	def getmsg_report_time_cost(self, is_succ):
+		uesec_end = time.time()
+		run_seconds = int(uesec_end - self.uesec_start)
+
+		runtime = "Time cost: %d seconds =%dh,%dm,%ss" % (run_seconds, *Seconds_to_DHMS(run_seconds)[1:4])
+
+		if is_succ:
+			return 'Irsync session SUCCESS. %s' % (runtime)
+		else:
+			return 'Irsync session FAIL! %s' % (runtime)
+
 
 	def y_find_existing_ushelf(self):
 		# A backup_done.ini file identifies a ushelf directory.
@@ -482,6 +467,9 @@ class irsync_st(LoggerFence):
 		#
 		try:
 			sess_logfile, sess_logfh = self.create_sess_logfile()
+			sess_logfile_success = self.to_success_path(sess_logfile)
+			self._sess_logfile = sess_logfile
+
 			sesslog_d, sesslog_n = os.path.split(sess_logfile)
 			assert( sesslog_d.startswith(self.working_dirpath) ) # sesslog_d has an extra 'logs' subdir
 			self.masterlogI("""Session logfile can be found at:
@@ -489,7 +477,7 @@ class irsync_st(LoggerFence):
     (finish)  : {}
 """.format      (
 				sess_logfile,
-				self.to_success_path(sess_logfile)
+				sess_logfile_success
 				)
 			)
 		except OSError as e:
@@ -509,13 +497,23 @@ class irsync_st(LoggerFence):
 		sesslogW = partial(sess_logger.log, MsgLevel.warn.value)
 		sesslogI = partial(sess_logger.log, MsgLevel.info.value)
 
+		cls = __class__
+		#
+		def sess_excpt_saction(excpt_text):
+			# excpt_text is given by LiveFence().
+			l2f = partial(sess_logger.log, MsgLevel.err.value,
+		            targets=cls.logtarget_file  # so that this excpt_text does not print to console
+			        )
+			l2f(excpt_text)
+			l2f(self.getmsg_report_time_cost(False))
+
 		sesslogI("run_irsync_session_once() start.")
 
 		# I put the irsync session code in a LiveFence context, so that in case an unknown exception
-		# is raise within, the LiveFence will record the stacktrace into sess_logfile, and still
+		# is raised within, the LiveFence will record the stacktrace into sess_logfile, and still
 		# let that exception propagate.
 		#
-		with LiveFence( partial(sess_logger.log, MsgLevel.err.value, targets=__class__.logtarget_file) ):
+		with LiveFence( sess_excpt_saction ):
 			# Check whether last-success dir exists
 			#
 			last_succ_dirpath = ReadIniItem(self.ini_filepath, INISEC_last_success_dirpath, self.ushelf_name)
@@ -546,22 +544,29 @@ class irsync_st(LoggerFence):
 
 		sess_logfh.close()
 
-		self.sess_done_write_timestamp()
+		# In the actual ushelf dir, create backup_done.ini to record this ushelf's finish time,
+		# for later stale checking(gets deleted when it becomes too old).
+		#
+		self.ushelf_record_finish_timestamp()
 
-		try:
-			os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
-			os.rename(self.working_dirpath, self.finish_dirpath) # move and rename the dir
-		except OSError:
-			raise Err_irsync("Error: Irsync session succeeded, but fail to move working directory to finish directory.")
+		# Move/Rename this ushelf's .working dir to its finish-dir. So to claim backup success.
+		#
+		self.ushelf_rename_to_finish_dir()
+		#
+		self._sess_logfile = sess_logfile_success # it changed due to the finish-dir rename
 
-		# Record [last_success_dirpath] into rsync.ini
-		try:
-			WriteIniItem(self.ini_filepath, INISEC_last_success_dirpath,
-		             self.ushelf_name, self.finish_dirpath_rela)
-		except OSError:
-			raise Err_irsync('Error: Cannot record [%s] information into file "%s"'%(
-				INISEC_last_success_dirpath, self.ini_filepath))
-		return
+		# Associate this ushelf name to this finish-dir in irsync.ini, so that on next run, we can do
+		# incremental backup over this existing ushelf content.
+		#
+		self.ushelf_record_last_finish_dir()
+
+		# Record this finish-dir to foo.txt in favor of cmdline parameter --finish-dir-write-to=foo.txt .
+		#
+		self.record_finish_dir_by_user()
+
+		self.irsync_report_new_success(sess_logfile_success)
+
+		self.masterlogI(self.getmsg_report_time_cost(True))
 
 
 	def call_rsync_subprocess_once(self, sess_logfile, sess_logger, last_succ_dirpath):
@@ -610,7 +615,7 @@ class irsync_st(LoggerFence):
 		sess_logger.log(MsgLevel.info.value, """Launching rsync subprocess with argv[]:
 %s
     The corresponding shell command line is (for your manual debugging):
-	    %s
+        %s
     With log file: %s (in same directory as this one)
     This rsync run-time limit: %s
 %s
@@ -629,7 +634,8 @@ class irsync_st(LoggerFence):
 %s
 """ % (sess_logger.last_datetimestr, shell_cmd, line_sep78))
 		#
-		raise ValueError('Hehe, DELIBERATE RAISE ERROR HERE.')
+#		raise ValueError('Hehe, DELIBERATE RAISE ERROR HERE.') # debugging purpose
+
 		(exitcode, kill_at_uesec) = run_exe_log_output_and_print(
 			rsync_argv, rsync_run_secs, {"shell": False}, fh_rsync)
 
@@ -645,38 +651,12 @@ class irsync_st(LoggerFence):
 			# Use .err(instead of .err_raise) here, bcz I do not consider it FINAL error.
 			#
 			sess_logger.log(MsgLevel.err.value, """rsync run fail, exitcode=%d
-    To know detailed reason. Check rsync console message log at:
+    To know detailed reason. Check rsync console message at:
         %s""" % (exitcode, fp_rsync))
 
 			raise Err_rsync_exec(exitcode, self.ushelf_name)  # The caller may retry rsync.exe later
 
-#		self.info("irsync session - run() end")
-
-		# Move .working-directory into finish-directory
-		#
 		fh_rsync.close()
-
-	def success_cleanup(self):
-		if self._finish_dir_write_to:
-			hint_fp = os.path.abspath(self._finish_dir_write_to)
-			hint_text = self.finish_dirpath
-			if self._finish_dir_relative:
-				hint_text = self.finish_dirpath_rela
-
-			succ = True
-			try:
-				open(hint_fp, "w").write(hint_text)
-			except:
-				succ = False
-
-			self.prn_masterlog("""Write finish directory to file:
-    %s
--- %s """%(
-				hint_fp,
-				"Success." if succ else "Fail!"
-            ))
-		self.master_logfile_end(True)
-		return
 
 def _check_rsync_url(rsync_src):
 	"""Check rsync url format validity.
@@ -714,19 +694,9 @@ def irsync_fetch_once(apargs, rsync_extra_params):
 
 	try:
 		irs = irsync_st(apargs, rsync_extra_params)
+		irs.run_irsync_session_once()
+		return True
 	except Err_irsync as e:
 		print(e.errmsg)
 		return False
 
-	try:
-		irs.run_irsync_session_once()
-		irs.success_cleanup()
-	except:
-		re_raise = irs.log_finalize_due_to_exception()
-		if re_raise:
-			raise
-		else:
-			return False
-
-	return True
-	
