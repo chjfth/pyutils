@@ -25,7 +25,7 @@ LOG_NOD = '__logs__' # as directory node name for storing log files.
 ININAM_irsync_master = 'irsync.ini'
 INISEC_last_success_dirpath = 'last_success_dirpath'
 #
-ININAM_sess_done = 'backup_done.ini'
+ININAM_sess_done = '_irsync_backup_done.ini'
 INISEC_sess_done = 'backup_done'
 INIKEY_utc = 'utc'
 INIKEY_localtime = 'localtime'
@@ -382,11 +382,11 @@ Check session log file for details:
 
 
 	def y_find_existing_ushelf(self):
-		# A backup_done.ini file identifies a ushelf directory.
-		# And, I will check backup_done.ini only in second-depth subdirs.
+		# Existence of a _irsync_backup_done.ini file identifies a historical finished ushelf directory.
+		# And, I will check that ini only in second-depth subdirs fron local_store_dir.
 		root_start = self.local_store_dir
 		for root, dirs, files in os.walk(root_start):
-			dirnods = root.replace(root_start, '', 1) # strip root_start prefix
+			dirnods = root.replace(root_start, '$', 1) # strip root_start prefix, use '$' to denote root
 #			print('dirnods='+dirnods) # debug
 			if(dirnods.count(os.sep)==2):
 				# now we are at the a second-depth subdir
@@ -415,29 +415,30 @@ Check session log file for details:
 		# bcz they are precious for later incremental backups.
 		#
 		last_success_dirpaths = IniEnumSectionItems(self.ini_filepath, INISEC_last_success_dirpath)
+		last_success_abspaths = [os.path.abspath(p) for p in last_success_dirpaths]
 
 		delete_count = 0
 		uesec_new = int(time.time())
-		for uesec_old, dirpath_old in self.y_find_existing_ushelf():
-			sec_stale = uesec_new - uesec_old
-			if sec_stale > sec_keep:
-				str_DHM = "{} days, {} hours, {} minutes".format(*Seconds_to_DHMS(sec_stale)[0:3])
+		for uesec_history, dirpath_history in self.y_find_existing_ushelf():
+			seconds_old = uesec_new - uesec_history
+			if seconds_old > sec_keep:
+				str_DHM = "{} days, {} hours, {} minutes".format(*Seconds_to_DHMS(seconds_old)[0:3])
 
-				if dirpath_old in last_success_dirpaths:
+				if os.path.abspath(dirpath_history) in last_success_abspaths:
 					self.masterlogI("""Seeing old backup at: (created %s ago (%d seconds stale))
     %s
 --but do not remove it because it is recorded in %s as last-success (precious for later incremental backup)."""%(
-						str_DHM, sec_stale,
-						dirpath_old,
+						str_DHM, seconds_old,
+						dirpath_history,
 						ININAM_irsync_master
 					))
 				else:
 					self.masterlogI("""Removing old backup at: (created %s ago (%d seconds stale))
-    %s"""%(str_DHM, sec_stale, dirpath_old))
+    %s"""%(str_DHM, seconds_old, dirpath_history))
 
-					shutil.rmtree(dirpath_old)
+					shutil.rmtree(dirpath_history)
 					delete_count +=1
-					RemoveDir_IfEmpty(dirpath_old)
+					RemoveDir_IfEmpty(dirpath_history)
 
 		if delete_count==0:
 			self.masterlogI("No existing backups are stale, leaving them alone this time.")
