@@ -8,8 +8,8 @@ D:\gitw\pyutils> python -m cheese.incremental_rsync.test
 import os, sys
 import argparse
 from .share import *
-from .client import *
-from .client import _check_rsync_url
+from .irsync_client import *
+from .irsync_client import _check_rsync_url
 
 def non_negative_int(x):
     i = int(x)
