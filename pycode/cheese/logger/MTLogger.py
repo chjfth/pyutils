@@ -11,11 +11,11 @@ So, MTLog is the class to help you do the dispatching.
 
 Each dispatch target is associated with a "level", more exactly, a "sink-level". The "source-level"
 is assigned by the caller with each input message. If sink_level>=source_level, the "sink" takes place,
-i.e. the corresponding target "receives" the messsage(e.g., use sees console output, message written to file).
+i.e. the corresponding target "receives" the message(e.g., use sees console output, message written to file).
 
 Mnemonics:
 * source-level tells how verbose the message is, the larger value, the more verbose.
-* sink-level tells how verbose the logger wants to record the messsage.
+* sink-level tells how verbose the logger wants to record the message.
 
 MTLog accepts each piece of message atomically, and will prepend timestamp and append line-ending for it.
 
