@@ -193,7 +193,7 @@ def y_run_exe_with_time_limit(cmd_args, max_run_secs=0, dict_Popen_args={}):
 				yield linebytes #print("###%s" % (linebytes.decode('utf8')), end='')
 				watchdog.feed_dog()
 
-	return (subproc.returncode, watchdog.uesec_timeout_action) # return a tuple: subprocess exitcode and force-kill uesec
+	return (subproc.returncode, watchdog.uesec_timeout_fired) # return a tuple: subprocess exitcode and force-kill uesec
 
 def run_exe_log_output_and_print(cmd_args, max_run_secs, dict_Popen_args={}, logfile_handle=None):
 	
