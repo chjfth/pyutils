@@ -1,58 +1,4 @@
 <keymap version="1" name="Visual Studio - chj" parent="$default">
-  <action id="$Copy">
-    <keyboard-shortcut first-keystroke="ctrl c" />
-    <keyboard-shortcut first-keystroke="ctrl insert" />
-  </action>
-  <action id="$Cut">
-    <keyboard-shortcut first-keystroke="ctrl x" />
-  </action>
-  <action id="$Paste">
-    <keyboard-shortcut first-keystroke="ctrl v" />
-    <keyboard-shortcut first-keystroke="shift insert" />
-  </action>
-  <action id="$Redo">
-    <keyboard-shortcut first-keystroke="ctrl y" />
-  </action>
-  <action id="ActivateBuildToolWindow">
-    <keyboard-shortcut first-keystroke="alt 0" />
-  </action>
-  <action id="ActivateDatabaseToolWindow">
-    <keyboard-shortcut first-keystroke="ctrl alt 3" />
-  </action>
-  <action id="ActivateErrorsInSolutionToolWindow">
-    <keyboard-shortcut first-keystroke="ctrl alt 2" />
-  </action>
-  <action id="ActivateFindToolWindow">
-    <keyboard-shortcut first-keystroke="alt 3" />
-    <keyboard-shortcut first-keystroke="ctrl alt f12" />
-  </action>
-  <action id="ActivateInspectionResultsToolWindow">
-    <keyboard-shortcut first-keystroke="ctrl alt 4" />
-    <keyboard-shortcut first-keystroke="ctrl alt v" />
-  </action>
-  <action id="ActivateMessagesToolWindow" />
-  <action id="ActivateNuGetToolWindow">
-    <keyboard-shortcut first-keystroke="alt 7" />
-    <keyboard-shortcut first-keystroke="shift alt 7" />
-  </action>
-  <action id="ActivateProjectToolWindow">
-    <keyboard-shortcut first-keystroke="ctrl alt l" />
-    <keyboard-shortcut first-keystroke="alt 1" />
-  </action>
-  <action id="ActivateServicesToolWindow" />
-  <action id="ActivateStructureToolWindow">
-    <keyboard-shortcut first-keystroke="ctrl alt f" />
-  </action>
-  <action id="ActivateTerminalToolWindow">
-    <keyboard-shortcut first-keystroke="ctrl alt 1" />
-  </action>
-  <action id="ActivateUnitTestsToolWindow">
-    <keyboard-shortcut first-keystroke="alt 8" />
-    <keyboard-shortcut first-keystroke="shift alt 8" />
-  </action>
-  <action id="ActivateWebToolWindow">
-    <keyboard-shortcut first-keystroke="ctrl alt w" />
-  </action>
   <action id="Back">
     <mouse-shortcut keystroke="button4" />
     <keyboard-shortcut first-keystroke="alt left" />
@@ -64,19 +10,6 @@
   <action id="ChangesView.Rename">
     <keyboard-shortcut first-keystroke="ctrl r" second-keystroke="r" />
   </action>
-  <action id="CheckinProject">
-    <keyboard-shortcut first-keystroke="ctrl alt k" />
-  </action>
-  <action id="ChooseRunConfiguration">
-    <keyboard-shortcut first-keystroke="shift ctrl alt r" />
-  </action>
-  <action id="ClassNameCompletion">
-    <keyboard-shortcut first-keystroke="shift alt space" />
-  </action>
-  <action id="CodeCleanup">
-    <keyboard-shortcut first-keystroke="ctrl e" second-keystroke="c" />
-    <keyboard-shortcut first-keystroke="ctrl e" second-keystroke="ctrl c" />
-  </action>
   <action id="CodeCompletion">
     <keyboard-shortcut first-keystroke="ctrl space" />
     <keyboard-shortcut first-keystroke="ctrl j" />
@@ -86,9 +19,6 @@
   <action id="CommentByLineComment">
     <keyboard-shortcut first-keystroke="ctrl alt slash" />
     <keyboard-shortcut first-keystroke="ctrl alt divide" />
-    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="c" />
-    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl c" />
-    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl slash" />
   </action>
   <action id="Compile">
     <keyboard-shortcut first-keystroke="ctrl f7" />
@@ -105,7 +35,6 @@
   <action id="Debug">
     <keyboard-shortcut first-keystroke="alt f5" />
   </action>
-  <action id="Django.RunManageTaskAction" />
   <action id="EditBreakpoint">
     <keyboard-shortcut first-keystroke="alt f9" />
   </action>
@@ -145,11 +74,9 @@
   </action>
   <action id="EditorToggleShowWhitespaces">
     <keyboard-shortcut first-keystroke="ctrl r" second-keystroke="w" />
-    <keyboard-shortcut first-keystroke="ctrl r" second-keystroke="ctrl w" />
   </action>
   <action id="EditorToggleUseSoftWraps">
     <keyboard-shortcut first-keystroke="ctrl e" second-keystroke="w" />
-    <keyboard-shortcut first-keystroke="ctrl e" second-keystroke="ctrl w" />
   </action>
   <action id="EditorUnSelectWord">
     <keyboard-shortcut first-keystroke="ctrl alt left" />
@@ -174,8 +101,6 @@
   </action>
   <action id="FindNext">
     <keyboard-shortcut first-keystroke="f3" />
-    <keyboard-shortcut first-keystroke="shift ctrl down" />
-    <keyboard-shortcut first-keystroke="ctrl alt page_down" />
   </action>
   <action id="FindPrevious">
     <keyboard-shortcut first-keystroke="shift f3" />
@@ -194,17 +119,6 @@
     <mouse-shortcut keystroke="button5" />
     <keyboard-shortcut first-keystroke="alt right" />
   </action>
-  <action id="Git.Commit.And.Push.Executor">
-    <keyboard-shortcut first-keystroke="shift ctrl alt k" />
-  </action>
-  <action id="Git.Rename.Local.Branch">
-    <keyboard-shortcut first-keystroke="ctrl r" second-keystroke="r" />
-  </action>
-  <action id="Git.Reword.Commit">
-    <keyboard-shortcut first-keystroke="ctrl r" second-keystroke="r" />
-  </action>
-  <action id="Github.PullRequest.Details.Reload" />
-  <action id="Github.PullRequest.Timeline.Update" />
   <action id="GoToTab1">
     <keyboard-shortcut first-keystroke="ctrl 1" />
   </action>
