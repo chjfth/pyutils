@@ -33,19 +33,19 @@ class WatchdogThread(Thread):
 	In the above example, the max_run_seconds will determine max run-time of the sub-process.
 	"""
 
-	def __init__(self, once_timeout_sec, max_run_seconds, timeout_action, *action_args,
+	def __init__(self, once_timeout_seconds, max_run_seconds, timeout_action, *action_args,
 	             is_print_dbginfo=False,
 	             **thread_init_kwargs):
 		"""Initialize the WatchdogThread object.
 
-		:param once_timeout_sec:
+		:param once_timeout_seconds:
 			The dog feeding interval should not exceed this many seconds,
 			otherwise, timeout action will be taken.
 			If 0, once-timeout is not used, i.e. only use max_run_seconds.
 
 		:param max_run_seconds:
 			When these seconds has elapsed, timeout action will be taken.
-			If 0, max_run_seconds is not used, i.e. only use once_timeout_sec.
+			If 0, max_run_seconds is not used, i.e. only use once_timeout_seconds.
 
 		:param timeout_action:
 			The callback function that represents a timeout-action.
@@ -68,7 +68,7 @@ class WatchdogThread(Thread):
 
 		# Init working params
 		#
-		self.set_new_timeout(once_timeout_sec, max_run_seconds)
+		self.set_new_timeout(once_timeout_seconds, max_run_seconds)
 		#
 		self._timeout_action = timeout_action
 		self._action_args = action_args
@@ -175,7 +175,7 @@ def pipe_process_with_timeout(subproc, once_timeout_sec, max_run_seconds, is_pri
 	This is useful when you want to call the potentially forever-blocking subproc.stdout.readline(),
 	because the .kill() by the watchdog thread will render blocking pipe read to return.
 
-	To feed the dog, write code like below:
+	To feed the dog, user writes code like below:
 
 	subproc = subprocess.Popen(...)
 	with pipe_process_with_timeout(subproc, ...) as watchdog:
@@ -192,7 +192,7 @@ def pipe_process_with_timeout(subproc, once_timeout_sec, max_run_seconds, is_pri
 		If feed_dog() has not been called these many seconds, the subproc will be killed by the watchdog thread.
 
 	:param max_run_seconds:
-		If the subproc has run for these many seconds, it will be killed.
+		If the subproc has run for these many total seconds, it will be killed.
 
 	:return: An implicit context-manager object.
 	"""
