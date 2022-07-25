@@ -1,5 +1,0 @@
-# Doc: https://git-scm.com/docs/gitattributes
-
-# 2022.07, All .xml here use LF as line-ending, event on Windows,
-# so we mark them as non-text(=no doing CRLF conversion).
-*.xml    -text
