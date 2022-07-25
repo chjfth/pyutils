@@ -1,0 +1,9 @@
+# Doc: https://git-scm.com/docs/gitattributes
+
+# normalize all introduced text files to LF line endings (recognized by git)
+*           text=auto
+
+# 2022.07, For Jetbrains Intellij/PyCharm project-setting file .idea/profiles_settings.xml ,
+# This profiles_settings.xml always use LF as line-ending, event on Windows,
+# so we mark it as non-text(=no doing CRLF conversion).
+profiles_settings.xml    -text
