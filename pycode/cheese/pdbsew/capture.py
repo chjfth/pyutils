@@ -5,54 +5,9 @@
 import os, sys
 import re, time
 import configparser
-import argparse
+import click
+#import argparse
 from .share import *
-
-def non_negative_int(x):
-	i = int(x)
-	if i < 0:
-		raise argparse.ArgumentTypeError('Negative values are not allowed.')
-	return i
-
-def init_argparser():
-	ap = argparse.ArgumentParser(
-		description="pdbsew-svnco, SVN checkout command wrapper for pdbsew. "
-		            "This wrapper records assistive files in your checkout local folder so that pdbsewing "
-					"may take effect in following developing cycle."
-	)
-
-	ap.add_argument('svnurl', type=str,
-		help='The SVN URL to checkout, sth like: svn://server.com/svnrepo/somelib .'
-	)
-
-	ap.add_argument('-t', '--svnco-datetime', type=str, default='', dest='svnco_datetime',
-		help='The datetime to checkout. Complete foramt is like:\n'
-			 '  "2022-07-25 18:30:00 +0800" \n'
-		     'or, to avoid space-char,\n'
-			 '   2022-07-25.18:30:00.+0800 \n'
-	         'If you omit timezone, client machine timezone is used.'
-	) # long option is named "svnco-datetime" bcz its value is passed directly to 'svn checkout'
-
-	ap.add_argument('-d', '--localdir', type=str, default='',
-		help='Checkout to which local folder, default to current working directory.'
-	)
-
-	ap.add_argument('-b', '--branchie', type=str, default='',
-		help='The branchie string is the path node(s) that signify a branch in svn url. '
-	        'If omitted(by default), it is determined automatically. Default rule is:\n\n'
-	        'If there is "/trunk/sth1" in url, "trunk" is considered the branchie.\n\n'
-		    'If there is "/tags/sth2/sth3" in url, "tags/sth2" is considered the branchie.\n'
-		    'If there is "/branches/sth4/sth5" in url, "branches/sth4" is considered the branchie.\n'
-		    'If its value is a single "/", then it explicitly means no branchie.\n'
-	        'Purpose: When pdbsew later does revive-checkout, the branchie part will not appear in local dir.'
-	)
-
-	ap.add_argument('--msg-level', type=str, dest='msg_level', choices=[e.name for e in list(MsgLevel)],
-		default='info',
-		help='Assigns log message level. Default is "%(default)s".'
-	)
-
-	return ap
 
 def local_timezone_minute_str():
 	# For China, return "+0800"
@@ -94,21 +49,72 @@ def normalize_svnco_datetime(dtstr):
 	dtstr = replace1char(dtstr, 19, ' ')
 	return dtstr
 
-def capture_by_svnurl(apargs):
-	"""Capture an svnurl state according to input svnurl and datetime.
 
-	Input: [apargs] .svnurl .svnco_datetime .localdir
+@click.command(name="capture")
+@click.argument("svnurl", required=True)
+@click.argument("localdir", required=False)
+@click.option("-t", "timestamp", metavar="TIMESTAMP", help="""
+	The datetime to checkout. Complete format is like:
+	
+	\b
+	    2022-07-25 18:30:00 +0800
+	
+	\b
+	or, to avoid space-char:
+	
+	\b
+	    2022-07-25.18:30:00.+0800
 
-	Output: $(.localdir)/pdbsew.capture.ini
+	If you omit timezone, client machine timezone is used.
+
+	\b
+	""")
+@click.option("-b", "branchie", help="""
+	The branchie string is the path node(s) that signify a branch in svn url.
+
+	\b
+	If omitted, it is determined automatically. The rule is:
+	- If "/trunk/sth1" in url, "trunk" is considered the branchie.
+	- If "/tags/sth2/sth3" in url, "tags/sth2" is.
+	- If "/branches/sth4/sth5" in url, "branches/sth4" is.
+
+	If assigning value "/", then it explicitly means no branchie.
+
+	Purpose: When pdbsew later does revive-checkout, the branchie part will not be created
+	in your local file system.
+	
+	\b
+	""")
+def pdbsew_capture(svnurl, localdir, timestamp, branchie):
+	"""Capture an svn-repo state according to an SVN URL and a timestamp.
+	If timestamp is not explicitly assigned, current time will be used.
+
+	If localdir is not explicitly assigned, current working dir is used.
+	A file named pdbsew.capture.ini will be generated in LOCALDIR to record
+	the captured state.
+
+	The captured state will be later used by pdb-sewing procedure.
+
+	SVNURL is the svn url used in `svn checkout` command. Example:
+
+		svn://server.com/svnrepo/somelib
+
+	LOCALDIR is your local file system directory, default to current working dir.
+
+	\f
+
+	:param svnurl:
+
+	:param localdir:
+	:param svnco_datetime:
+	:param branchie:
+	:return:
 	"""
-	svnco_datetime = normalize_svnco_datetime(apargs.svnco_datetime)
 
-	# apargs.svnco_datetime
-	apargs.svnco_datetime = svnco_datetime
+	svnco_datetime = normalize_svnco_datetime(timestamp)
 
-	# apargs.localdir
-	if apargs.localdir == '':
-		apargs.localdir = os.getcwd()
+	if not localdir == '':
+		localdir = os.getcwd()
 
 	# SVN URL dissection: svn://servername.com:3690/svnrepo/repo1/tags/v1.0/feature1
 	# urlbase  = svn://servername.com:3690
@@ -120,20 +126,20 @@ def capture_by_svnurl(apargs):
 
 	# Extract urlbase.
 	#
-	r = re.match(r'([a-z+]+://([a-z0-9-_@.:]+))/', apargs.svnurl)
+	r = re.match(r'([a-z+]+://([a-z0-9-_@.:]+))/', svnurl)
 	if not r:
-		raise Err_pdbsew('svnurl format error: No valid "scheme" found in ("%s")' % (apargs.svnurl))
+		raise Err_pdbsew('svnurl format error: No valid "scheme" found in ("%s")' % (svnurl))
 
 	urlbase = r.group(1)  # no trailing slash
 	urlhost = r.group(2).replace(':', '~')  # would be disk folder name
 
-	urlpathF = apargs.svnurl[len(urlbase):]
+	urlpathF = svnurl[len(urlbase):]
 
 	# Extract urlpathA/B/C
 	urlpathA = urlpathF.lstrip('/')  # for the case of input branchie="/" (explicit no branchie)
 	urlpathB = urlpathC = ''
 	#
-	if apargs.branchie == "":
+	if not branchie:
 		# Search for conventional branchie in svnurl.
 		r = re.match(r'(.*?)(/trunk)(/.*)*', urlpathF)
 		if not r:
@@ -147,16 +153,16 @@ def capture_by_svnurl(apargs):
 			if r.group(3):  # may be None
 				urlpathC = r.group(3).lstrip('/')
 
-			apargs.branchie = urlpathB
+			branchie = urlpathB
 		else:
 			pass  # leave the branchie blank
 
-	elif apargs.branchie == "/":
-		apargs.branchie = ""
+	elif branchie == "/":
+		branchie = ""
 		pass  # urlpathA/B/C defaults already set
 	else:
 		# User explicit branchie, and we need to actually see that branchie in svnurl.
-		r = re.match(r'(.*?)(/%s)(/.*)*' % (apargs.branchie), urlpathF)
+		r = re.match(r'(.*?)(/%s)(/.*)*' % (branchie), urlpathF)
 		if r:
 			urlpathA = r.group(1).lstrip('/')
 			urlpathB = r.group(2).lstrip('/')
@@ -165,14 +171,14 @@ def capture_by_svnurl(apargs):
 		else:
 			raise Err_pdbsew('svnurl error: You assign branchie="%s", but that string does not exist in svnurl("").' % (apargs.branchie, apargs.svnurl))
 
-		assert apargs.branchie != ""
+		assert branchie != ""
 
 	# apargs.branchie set [above]
 
 	svnco_capture_exec = 'svn co %s@"{%s}" %s'%(
 		'/'.join([urlbase, urlpathA, urlpathB, urlpathC]),
-		apargs.svnco_datetime,
-		apargs.localdir)
+		svnco_datetime,
+		localdir)
 
 	INISECT = 'svninfo'
 
@@ -180,10 +186,10 @@ def capture_by_svnurl(apargs):
 	if not iniobj.has_section(INISECT):
 		iniobj.add_section(INISECT)
 
-	iniobj.set(INISECT, 'svnurl', apargs.svnurl)
-	iniobj.set(INISECT, 'branchie', apargs.branchie)
-	iniobj.set(INISECT, 'svnco_datetime', apargs.svnco_datetime)
-	iniobj.set(INISECT, 'localdir', apargs.localdir)
+	iniobj.set(INISECT, 'svnurl', svnurl)
+	iniobj.set(INISECT, 'branchie', branchie)
+	iniobj.set(INISECT, 'svnco_datetime', svnco_datetime)
+	iniobj.set(INISECT, 'localdir', localdir)
 	iniobj.set(INISECT, 'svnco_capture_exec', svnco_capture_exec)
 
 	iniobj.set(INISECT, 'urlbase', urlbase)
@@ -193,36 +199,11 @@ def capture_by_svnurl(apargs):
 	iniobj.set(INISECT, 'urlpathB', urlpathB)
 	iniobj.set(INISECT, 'urlpathC', urlpathC)
 
-	fpath_capture_ini = os.path.join(apargs.localdir, FILENAME_CAPTURE_INI)
+	fpath_capture_ini = os.path.join(localdir, FILENAME_CAPTURE_INI)
 	with open(fpath_capture_ini, 'w') as fh:
 		iniobj.write(fh)
 
 	return
 
-
-def do_cmd():
-	"""Command line interface, will use sys.argv[] implicitly. """
-
-	# Warn empty parameter and quit.
-	#
-	ap = init_argparser()
-	if len(sys.argv)==1:
-		ap.print_usage()
-		exit(1)
-
-	argv = sys.argv
-
-	apargs = ap.parse_args(argv[1:])
-
-	capture_by_svnurl(apargs)
-
-	print("====ok====")
-	print(apargs)
-
-	return 0
-
 if __name__ == '__main__':
-
-	err = do_cmd()
-
-	exit(err)
+	pdbsew_capture() # no return
