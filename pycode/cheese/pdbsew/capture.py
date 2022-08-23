@@ -7,6 +7,7 @@ import re, time
 import configparser
 import click
 #import argparse
+from . import pyclick_tweak
 from .share import *
 
 def local_timezone_minute_str():
@@ -54,7 +55,7 @@ def normalize_svnco_datetime(dtstr):
 @click.argument("svnurl", required=True)
 @click.argument("localdir", required=False)
 @click.option("-t", "--timestamp", "timestamp", metavar="TIMESTAMP", help="""
-	The datetime to checkout. Complete format is like:
+	The svn checkout datetime(as peg). Complete format is like:
 	
 	\b
 	    2022-07-25 18:30:00 +0800
@@ -69,7 +70,7 @@ def normalize_svnco_datetime(dtstr):
 
 	\b
 	""")
-@click.option("-b", "branchie", help="""
+@click.option("-b", "branchie", metavar="BRANCHIE", help="""
 	The branchie string is the path node(s) that signify a branch in svn url.
 
 	\b

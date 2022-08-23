@@ -87,8 +87,5 @@ def svn_checkout_wrapper(svncmd):
 
 
 
-
-
-
 if __name__=='__main__':
 	pass
