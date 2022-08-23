@@ -211,17 +211,26 @@ def pipe_process_with_timeout(subproc, once_timeout_sec, max_run_seconds, is_pri
 
 if __name__=='__main__':
 	"""
-python3 -m cheese.subprocess_tools.watchdog 2,30 "./sleep-print 1000 1900 3000 4000"
-python3 -m cheese.subprocess_tools.watchdog 2,4 "./sleep-print 990 990 990 990 990"
+python3 -m subprocess_tools.watchdog 2,30 "./sleep-print 1000 1900 3000 4000"
+python3 -m subprocess_tools.watchdog 2,4 "./sleep-print 990 990 990 990 990"
 	"""
 
 	once_secs, total_secs = [int(n) for n in sys.argv[1].split(',')]
 	sleep_print_cmd = sys.argv[2]
-	print("Will run %d,%d seconds"%(once_secs, total_secs))
+	exename = sleep_print_cmd.split()[0]
+	print("Will run %s %d,%d seconds."%(exename, once_secs, total_secs))
 #	uesec_limit = uesec_now() + run_seconds
 
-	with subprocess.Popen(sleep_print_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as subproc:
+	try:
+		subproc = subprocess.Popen(sleep_print_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+	except FileNotFoundError:
+		print(f"[ERROR] The command to execute is not found: {exename}")
+		exit(1)
+	except OSError:
+		print(f"[ERROR] Execution fail, perhaps not an executable file: {exename}")
+		exit(1)
 
+	with subproc:
 		with pipe_process_with_timeout(subproc, once_secs, total_secs, is_print_dbginfo=True) as watchdog:
 			for linebytes in subproc.stdout:
 				if not linebytes:

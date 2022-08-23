@@ -53,7 +53,7 @@ def normalize_svnco_datetime(dtstr):
 @click.command(name="capture")
 @click.argument("svnurl", required=True)
 @click.argument("localdir", required=False)
-@click.option("-t", "timestamp", metavar="TIMESTAMP", help="""
+@click.option("-t", "--timestamp", "timestamp", metavar="TIMESTAMP", help="""
 	The datetime to checkout. Complete format is like:
 	
 	\b
@@ -169,7 +169,7 @@ def pdbsew_capture(svnurl, localdir, timestamp, branchie):
 			if r.group(3):  # may be None
 				urlpathC = r.group(3).lstrip('/')
 		else:
-			raise Err_pdbsew('svnurl error: You assign branchie="%s", but that string does not exist in svnurl("").' % (apargs.branchie, apargs.svnurl))
+			raise Err_pdbsew('svnurl error: You assign branchie="%s", but that string does not exist in svnurl("%s").' % (branchie, svnurl))
 
 		assert branchie != ""
 
@@ -181,6 +181,10 @@ def pdbsew_capture(svnurl, localdir, timestamp, branchie):
 		localdir)
 
 	INISECT = 'svninfo'
+	fpath_capture_ini = os.path.join(localdir, FILENAME_CAPTURE_INI)
+
+	prn(f"Generating {FILENAME_CAPTURE_INI} into:\n"
+	    f"{INDENT1}{fpath_capture_ini}")
 
 	iniobj = configparser.ConfigParser()
 	if not iniobj.has_section(INISECT):
@@ -199,7 +203,6 @@ def pdbsew_capture(svnurl, localdir, timestamp, branchie):
 	iniobj.set(INISECT, 'urlpathB', urlpathB)
 	iniobj.set(INISECT, 'urlpathC', urlpathC)
 
-	fpath_capture_ini = os.path.join(localdir, FILENAME_CAPTURE_INI)
 	with open(fpath_capture_ini, 'w') as fh:
 		iniobj.write(fh)
 
