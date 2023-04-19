@@ -7,4 +7,4 @@ cp -r  PyCharm2020.1/  ~/.config/JetBrains/
 
 ==== Windows ==== (CE is Community Edition)
 mkdir %AppData%\JetBrains
-xcopy /y /i /s  PyCharm2020.1  %AppData%\JetBrains\PyCharmCE2020.2
+xcopy /y /i /s  PyCharm2020.1  %AppData%\JetBrains\PyCharmCE2023.1
