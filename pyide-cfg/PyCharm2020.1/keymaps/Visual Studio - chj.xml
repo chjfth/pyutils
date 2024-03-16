@@ -320,6 +320,7 @@
   <action id="ShelvedChanges.Rename">
     <keyboard-shortcut first-keystroke="ctrl r" second-keystroke="r" />
   </action>
+  <action id="ShowBookmarks" />
   <action id="ShowErrorDescription">
     <keyboard-shortcut first-keystroke="ctrl f1" />
     <keyboard-shortcut first-keystroke="alt t" />
