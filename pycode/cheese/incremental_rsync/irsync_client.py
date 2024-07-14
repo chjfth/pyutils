@@ -322,8 +322,8 @@ class irsync_st(LoggerFence):
 		except OSError:
 			raise Err_irsync(
 				"Error: Irsync session succeeded, but fail to move working directory to finish directory.\n"
-				"The finish directory will be:\n"
-				"    " + self.finish_dirpath)
+				"    SRC: %s\n"
+				"    DST: %s\n" % (self.working_dirpath, self.finish_dirpath))
 
 	def ushelf_record_last_finish_dir(self):
 		# Record this on-disk info, so that next rsync run can --link-dest= to it.
@@ -358,7 +358,7 @@ class irsync_st(LoggerFence):
 		self.masterlogI("""Irsync session success. 
 Get your backup at:
     %s
-Session log file  :
+Session log file:
     %s""" % (self.finish_dirpath, logfile_success))
 
 	def irsync_report_new_failure(self):
@@ -453,8 +453,8 @@ Check session log file for details:
 		Return normally on success, raise Exception on error.
 		"""
 
-		# Check whether finish-dirpath has existed, if so, the backup has done already.
-		
+		# Check(1) whether finish-dirpath has existed, if so, the backup has done already.
+		#
 		if os.path.exists(self.finish_dirpath):
 			if os.path.isdir(self.finish_dirpath):
 				self.masterlogI(
@@ -466,6 +466,15 @@ Check session log file for details:
 				raise Err_irsync("I need to create backup directory '%s', but it appears to be a file in the way."%(
 					self.finish_dirpath))
 
+		# Check(2) whether _irsync_backup_done.ini has existed in .working dir .
+		# If so, the rsync transfer is considered done, but [.working-dir renaming to finish-dir] pending.
+		#
+		if os.path.isfile(self.sess_done_ini_filepath):
+			self.ushelf_finishing()
+			return
+
+		# Remove outdated ushelf dirs (remove old backups).
+		#
 		self.remove_old_ushelfs()
 
 		# Create session logging filename and save its handle. If error, raise exception.
@@ -504,7 +513,7 @@ Check session log file for details:
 
 		cls = __class__
 		#
-		def sess_excpt_saction(excpt_text):
+		def sess_excpt_section(excpt_text):
 			# excpt_text is given by LiveFence().
 			l2f = partial(sess_logger.log, MsgLevel.err.value,
 		            targets=cls.logtarget_file  # so that this excpt_text does not print to console
@@ -518,7 +527,7 @@ Check session log file for details:
 		# is raised within, the LiveFence will record the stacktrace into sess_logfile, and still
 		# let that exception propagate.
 		#
-		with LiveFence( sess_excpt_saction ):
+		with LiveFence( sess_excpt_section ):
 			# Check whether last-success dir exists
 			#
 			last_succ_dirpath = ReadIniItem(self.ini_filepath, INISEC_last_success_dirpath, self.ushelf_name)
@@ -554,11 +563,16 @@ Check session log file for details:
 		#
 		self.ushelf_record_finish_timestamp()
 
+		self._sess_logfile = sess_logfile_success # it changed due to the finish-dir rename
+
+		self.ushelf_finishing()
+		return
+
+
+	def ushelf_finishing(self):
 		# Move/Rename this ushelf's .working dir to its finish-dir. So to claim backup success.
 		#
 		self.ushelf_rename_to_finish_dir()
-		#
-		self._sess_logfile = sess_logfile_success # it changed due to the finish-dir rename
 
 		# Associate this ushelf name to this finish-dir in irsync.ini, so that on next run, we can do
 		# incremental backup over this existing ushelf content.
@@ -569,7 +583,7 @@ Check session log file for details:
 		#
 		self.record_finish_dir_by_user()
 
-		self.irsync_report_new_success(sess_logfile_success)
+		self.irsync_report_new_success(self._sess_logfile)
 
 		self.masterlogI(self.getmsg_report_time_cost(True))
 
