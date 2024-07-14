@@ -638,10 +638,18 @@ Check session log file for details:
 		#
 #		raise ValueError('Hehe, DELIBERATE RAISE ERROR HERE.') # debugging purpose
 
+		files_before = os.listdir(self.working_dirpath)
+
 		(exitcode, kill_at_uesec) = run_exe_log_output_and_print(
 			rsync_argv, rsync_run_secs, {"shell": False}, fh_rsync)
 
+		files_after = os.listdir(self.working_dirpath)
+
 		if exitcode == 0:
+
+			if(files_before==files_after):
+				raise Err_rsync_exec(44, self.ushelf_name, "Server side has no files, that is abnormal.")
+
 			sess_logger.log(MsgLevel.info.value, "rsync run success.")
 		else:
 			if kill_at_uesec > 0:

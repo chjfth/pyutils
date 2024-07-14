@@ -29,8 +29,10 @@ class Err_irsync(Exception):
 		return self.errmsg
 
 class Err_rsync_exec(Err_irsync):
-	def __init__(self, exitcode, ushelf):
+	def __init__(self, exitcode, ushelf, extra_msg=""):
 		errmsg = "rsync execution error, exitcode=%d. (ushelf=%s)"%(exitcode, ushelf)
+		if extra_msg:
+			errmsg += " " + extra_msg
 		super().__init__(errmsg)
 	
 
