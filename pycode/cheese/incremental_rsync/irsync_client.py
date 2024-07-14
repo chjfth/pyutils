@@ -320,7 +320,10 @@ class irsync_st(LoggerFence):
 			os.makedirs(os.path.dirname(self.finish_dirpath), exist_ok=True) # create its parent dir
 			os.rename(self.working_dirpath, self.finish_dirpath) # move and rename the dir
 		except OSError:
-			raise Err_irsync("Error: Irsync session succeeded, but fail to move working directory to finish directory.")
+			raise Err_irsync(
+				"Error: Irsync session succeeded, but fail to move working directory to finish directory.\n"
+				"The finish directory will be:\n"
+				"    " + self.finish_dirpath)
 
 	def ushelf_record_last_finish_dir(self):
 		# Record this on-disk info, so that next rsync run can --link-dest= to it.
@@ -383,7 +386,7 @@ Check session log file for details:
 
 	def y_find_existing_ushelf(self):
 		# Existence of a _irsync_backup_done.ini file identifies a historical finished ushelf directory.
-		# And, I will check that ini only in second-depth subdirs fron local_store_dir.
+		# And, I will check that ini only in second-depth subdirs from local_store_dir.
 		root_start = self.local_store_dir
 		for root, dirs, files in os.walk(root_start):
 			dirnods = root.replace(root_start, '$', 1) # strip root_start prefix, use '$' to denote root
@@ -584,6 +587,29 @@ Check session log file for details:
 		if self.uesec_limit>0:
 			rsync_run_secs = min(self._max_rsync_seconds, self.uesec_limit-now)
 
+		# [2024-07-14] Ensure that server-side file list is NOT empty.
+		#
+		(exitcode, output, _) = run_exe_grab_output_with_timeout(
+			["rsync", self.rsync_url], 5, {"shell": False})
+		if exitcode != 0 :
+			raise Err_rsync_exec(exitcode, self.ushelf_name)  # The caller may retry rsync.exe later
+		else:
+			direntries = output.splitlines()
+			if len(direntries) <= 1:
+				# The only entry is destined to be ".", meaning "this directory".
+				# This can happen when:
+				# * server-side is a WSL1 instance, and source path is /mnt/k,
+				# * server-side K: drive is a portable USB-SDD,
+				# * that USB-SDD is unplugged then replugged in,
+				# Now, WSL1 instance `ls /mnt/k` will get empty result, so the WSL1
+				# loses access to all files in K: drive.
+				# In this case, irsync should not pretend that the rsync transfer is successful.
+				#
+				# To recover, (server-side) Windows user has to shutdown and restart the WSL1 instance.
+				raise Err_rsync_exec(44, self.ushelf_name, "Server side has no files, that is abnormal.")
+
+
+
 		line_sep78 = '=' * 78
 		#
 		# Prepare rsync subprocess parameters...
@@ -638,18 +664,10 @@ Check session log file for details:
 		#
 #		raise ValueError('Hehe, DELIBERATE RAISE ERROR HERE.') # debugging purpose
 
-		files_before = os.listdir(self.working_dirpath)
-
 		(exitcode, kill_at_uesec) = run_exe_log_output_and_print(
 			rsync_argv, rsync_run_secs, {"shell": False}, fh_rsync)
 
-		files_after = os.listdir(self.working_dirpath)
-
 		if exitcode == 0:
-
-			if(files_before==files_after):
-				raise Err_rsync_exec(44, self.ushelf_name, "Server side has no files, that is abnormal.")
-
 			sess_logger.log(MsgLevel.info.value, "rsync run success.")
 		else:
 			if kill_at_uesec > 0:

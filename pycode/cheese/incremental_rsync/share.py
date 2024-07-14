@@ -209,5 +209,17 @@ def run_exe_log_output_and_print(cmd_args, max_run_secs, dict_Popen_args={}, log
 	(child_exitcode, kill_at_uesec) = gen_childoutput.retvalue
 	return (child_exitcode, kill_at_uesec)
 
+
+def run_exe_grab_output_with_timeout(cmd_args, max_run_secs, dict_Popen_args={}):
+	gen_childoutput = Generator(y_run_exe_with_time_limit(cmd_args, max_run_secs, dict_Popen_args))
+	output = ""
+	for line in gen_childoutput:
+		textline = line.decode("utf8")
+		output += textline
+
+	(child_exitcode, kill_at_uesec) = gen_childoutput.retvalue
+	return (child_exitcode, output, kill_at_uesec)
+
+
 if __name__=='__main__':
 	pass
