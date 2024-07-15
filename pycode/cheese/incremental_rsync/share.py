@@ -7,6 +7,7 @@ import os, sys, time, subprocess
 import math
 import re
 import datetime
+import shlex
 import glob
 from enum import Enum,IntEnum # since Python 3.4
 from .helper import *
@@ -40,6 +41,9 @@ class err_FileExists(Exception): # internal use
 	def __init__(self, errfilepath):
 		self.errfilepath = errfilepath
 
+def glueup_shell_cmd(argv_list):
+	shell_cmd = ' '.join([shlex.quote(onearg) for onearg in argv_list])
+	return shell_cmd
 
 def datetime_str_by_uesec(uesec, msec=False, compact=False):
 	tmlocal = time.localtime(uesec)

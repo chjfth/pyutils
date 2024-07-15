@@ -603,9 +603,18 @@ Check session log file for details:
 
 		# [2024-07-14] Ensure that server-side file list is NOT empty.
 		#
-		(exitcode, output, _) = run_exe_grab_output_with_timeout(
-			["rsync", self.rsync_url], 5, {"shell": False})
+		rsync_argv = ["rsync", "--list-only", self.rsync_url]
+		exclude_opt = self.extract_exclude_opt()
+		if exclude_opt:
+			rsync_argv.append(exclude_opt)
+		rsync_cmd_list = glueup_shell_cmd(rsync_argv)
+		(exitcode, output, _) = run_exe_grab_output_with_timeout(rsync_argv, 5, {"shell": False})
 		if exitcode != 0 :
+			sess_logger.log(MsgLevel.err.value, """The rsync command:
+    %s
+fails with following output:
+%s"""
+							%(rsync_cmd_list, output))
 			raise Err_rsync_exec(exitcode, self.ushelf_name)  # The caller may retry rsync.exe later
 		else:
 			direntries = output.splitlines()
@@ -653,7 +662,7 @@ Check session log file for details:
 
 		# Construct subprocess startup log text:
 		argv_hint_lines = ["{0}argv[{1}] = {2}".format(' ' * 8, i, s) for i, s in enumerate(rsync_argv)]
-		shell_cmd = ' '.join([shlex.quote(onearg) for onearg in rsync_argv])
+		shell_cmd = glueup_shell_cmd(rsync_argv)
 		sess_logger.log(MsgLevel.info.value, """Launching rsync subprocess with argv[]:
 %s
     The corresponding shell command line is (for your manual debugging):
@@ -699,6 +708,13 @@ Check session log file for details:
 			raise Err_rsync_exec(exitcode, self.ushelf_name)  # The caller may retry rsync.exe later
 
 		fh_rsync.close()
+
+
+	def extract_exclude_opt(self):
+		for param in self._rsync_extra_params:
+			if param.startswith("--exclude-from"):
+				return param
+		return ""
 
 def _check_rsync_url(rsync_src):
 	"""Check rsync url format validity.
