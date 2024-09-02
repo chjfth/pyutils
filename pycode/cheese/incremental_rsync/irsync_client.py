@@ -140,6 +140,13 @@ class irsync_st(LoggerFence):
 		#
 		
 		self.rsync_url = apargs.rsync_url
+
+		if not self.rsync_url.endswith("/"):
+			# Append "/" to ensure that rsync_url is a dirpath, so that later 
+			# `rsync --list-only` lists files inside that dir, instead of listing the dirname itself.
+			# "Listing dirname itself" can happen when rsync_url refers to a local dir, like "/mnt/d/test" .
+			self.rsync_url = self.rsync_url + "/"
+
 		self.local_store_dir = os.path.abspath(apargs.local_store_dir)
 		local_shelf = apargs.shelf # tune later
 		self.datetime_pattern = apargs.datetime_pattern if apargs.datetime_pattern else __class__.datetime_pattern_default
